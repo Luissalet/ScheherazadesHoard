@@ -89,3 +89,10 @@ def test_build_system_prompt_includes_boundaries_and_language(conn, world):
     prompt = narrator.build_system_prompt(w)
     assert "no sexual violence" in prompt
     assert "English" in prompt
+
+
+async def test_bare_json_is_cut_out_of_the_narration(conn, world):
+    content = 'La marea sube. {"new_facts": [{"text": "x"}]} Y nadie habla.'
+    result = await narrator.narrate(_link_with_content(content), conn, world["id"], "avanza")
+    assert "new_facts" not in result["narration"]
+    assert "La marea sube." in result["narration"] and "Y nadie habla." in result["narration"]

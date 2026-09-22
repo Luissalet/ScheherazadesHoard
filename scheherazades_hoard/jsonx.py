@@ -36,7 +36,7 @@ def _find_balanced_object(text: str, start: int) -> Optional[str]:
             elif ch == quote:
                 in_string = False
             continue
-        if ch in ("\"", "'"):
+        if ch == "\"":
             in_string = True
             quote = ch
         elif ch == "{":
@@ -48,31 +48,44 @@ def _find_balanced_object(text: str, start: int) -> Optional[str]:
     return None
 
 
-def extract_json(text: str) -> Optional[dict[str, Any]]:
-    """Best-effort extraction of a single JSON object from free-form text."""
-    if not text or not text.strip():
-        return None
+MAX_BRACE_STARTS = 20  # how many '{' positions to try in free prose
 
-    candidates: list[str] = []
+
+def extract_json_span(text: str) -> tuple[Optional[dict[str, Any]], Optional[tuple[int, int]]]:
+    """Like `extract_json`, plus the (start, end) of the text it came from,
+    so a caller can cut the JSON out of the surrounding narration."""
+    if not text or not text.strip():
+        return None, None
+
+    candidates: list[tuple[str, tuple[int, int]]] = []
 
     for match in _FENCE_RE.finditer(text):
-        candidates.append(match.group(1).strip())
+        candidates.append((match.group(1).strip(), match.span()))
 
-    # A bare object somewhere in the prose.
-    first_brace = text.find("{")
-    if first_brace != -1:
-        block = _find_balanced_object(text, first_brace)
+    # Bare objects in the prose. Not only the first '{': narration may
+    # contain a stray brace ("{sic}") before the real delta.
+    start = text.find("{")
+    tried = 0
+    while start != -1 and tried < MAX_BRACE_STARTS:
+        block = _find_balanced_object(text, start)
         if block:
-            candidates.append(block)
+            candidates.append((block, (start, start + len(block))))
+        tried += 1
+        start = text.find("{", start + 1)
 
-    candidates.append(text.strip())
+    candidates.append((text.strip(), (0, len(text))))
 
-    for candidate in candidates:
+    for candidate, span in candidates:
         for attempt in (candidate, _strip_trailing_commas(candidate)):
             try:
                 parsed = json.loads(attempt)
             except (json.JSONDecodeError, ValueError):
                 continue
             if isinstance(parsed, dict):
-                return parsed
-    return None
+                return parsed, span
+    return None, None
+
+
+def extract_json(text: str) -> Optional[dict[str, Any]]:
+    """Best-effort extraction of a single JSON object from free-form text."""
+    return extract_json_span(text)[0]

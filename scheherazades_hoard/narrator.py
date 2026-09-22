@@ -93,14 +93,15 @@ async def narrate(
         max_tokens=max_tokens, temperature=temperature,
     )
     raw = chat_result.text
-    parsed = jsonx.extract_json(raw)
+    parsed, span = jsonx.extract_json_span(raw)
 
     delta_obj = None
     unparsed = True
     narration_text = raw.strip()
     if parsed and any(k in parsed for k in DELTA_KEYS):
         delta_obj = {k: parsed[k] for k in DELTA_KEYS if k in parsed}
-        narration_text = _strip_json_block(raw)
+        # cut out exactly the block the delta came from (fenced or bare)
+        narration_text = _strip_json_block(raw[: span[0]] + raw[span[1]:]) if span else _strip_json_block(raw)
         unparsed = False
 
     return {

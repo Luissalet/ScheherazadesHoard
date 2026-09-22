@@ -38,3 +38,15 @@ def test_nested_braces_in_strings_do_not_break_balance():
     result = jsonx.extract_json(text)
     assert result["n"] == 1
     assert "{ weird }" in result["text"]
+
+
+# --- regressions found in review ------------------------------------------
+
+def test_stray_brace_in_prose_before_the_delta():
+    text = 'Ella escribe {sic} en el margen. {"new_facts": [{"text": "x"}]}'
+    assert jsonx.extract_json(text) == {"new_facts": [{"text": "x"}]}
+
+
+def test_apostrophe_before_the_object_does_not_break_it():
+    text = "Mara's lantern flickers. {\"scene\": {\"mood\": \"tense\"}}"
+    assert jsonx.extract_json(text) == {"scene": {"mood": "tense"}}
