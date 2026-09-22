@@ -78,10 +78,11 @@ def _ann(read_only: bool, idempotent: bool) -> ToolAnnotations:
 
 @mcp.tool(annotations=_ann(read_only=True, idempotent=True))
 async def story_worlds() -> dict:
-    """List every story world: id, name, genre, ruleset, language, counts
-    (entities, open threads, sessions) and the current session. Call this
-    first to learn a world's id; every other tool takes `world` as that id
-    or the world's exact name.
+    """List every world / mundo, campaña, historia — listar mundos, campañas.
+
+    id, name, genre, ruleset, language, counts (entities, open threads,
+    sessions) and the current session. Call this first to learn a world's
+    id; every other tool takes `world` as that id or the world's exact name.
 
     Keywords: worlds, list worlds, campaigns, stories, mundos, listar mundos, qué mundos hay, campañas, historias
     """
@@ -93,7 +94,8 @@ async def story_world_create(
     name: str, genre: str = "", tone: str = "", premise: str = "",
     ruleset: str = "freeform", language: str = "es",
 ) -> dict:
-    """Create a new, empty story world and return it with its id.
+    """Create a new world / crear mundo nuevo, nueva campaña, empezar historia.
+
     `ruleset` is freeform, d20 or pbta_2d6 (it changes how dice_roll reads
     results); `language` is es or en. Names must be unique.
 
@@ -109,8 +111,10 @@ async def story_world_create(
 async def world_context(
     world: str, focus: Optional[str] = None, include_secrets: bool = False, budget_chars: int = 3000,
 ) -> dict:
-    """The narrator's brief for the next scene. Call it before narrating.
-    `brief` is the text to read: premise, content boundaries, the current
+    """Scene brief / contexto de la escena, qué está pasando, resumen, dónde estamos.
+
+    Call it before narrating. `brief` is the text to read: premise,
+    content boundaries, the current
     location and who is present (status, traits, relations among them),
     the most relevant established facts, open and advanced threads, clocks
     at least half full and the last turns, each tagged with an id (E1, F1,
@@ -128,7 +132,9 @@ async def world_context(
 
 @mcp.tool(annotations=_ann(read_only=True, idempotent=True))
 async def world_search(world: str, query: str, kinds: Optional[list[str]] = None, limit: int = 8) -> dict:
-    """Find entities and established facts by words (accent-insensitive:
+    """Search / buscar, encontrar: quién es, dónde está, qué sabemos de.
+
+    Find entities and established facts by words (accent-insensitive:
     "corazon" finds "Corazón"). `kinds` narrows entities to any of
     character, location, faction, item, lore, creature. Returns up to
     `limit` (max 25) short hits of each with their ids, and `has_more`.
@@ -141,7 +147,9 @@ async def world_search(world: str, query: str, kinds: Optional[list[str]] = None
 
 @mcp.tool(annotations=_ann(read_only=True, idempotent=True))
 async def entity_get(world: str, ref: str, include_secrets: bool = False) -> dict:
-    """One entity by id, short ref (E3), name or alias: kind, status,
+    """Get entity / ficha de personaje, detalles, quién es, cómo es.
+
+    By id, short ref (E3), name or alias: kind, status,
     summary, description, fields (stats/traits), relations (with the other
     side's ref and name) and its 10 newest facts (`facts_has_more`).
     GM secrets only with include_secrets=true.
@@ -156,7 +164,9 @@ async def entity_upsert(
     world: str, kind: str, name: str, fields: Optional[dict] = None,
     summary: Optional[str] = None, secrets: Optional[str] = None, status: Optional[str] = None,
 ) -> dict:
-    """Create an entity, or update the one with this name or alias. On
+    """Create or update entity / crear personaje, nuevo lugar, añadir objeto, actualizar.
+
+    Create an entity, or update the one with this name or alias. On
     update only the values you pass change: `fields` is merged into the
     existing stats/traits, nothing you omit is cleared. `kind`: character,
     location, faction, item, lore, creature (must match an existing
@@ -175,7 +185,9 @@ async def entity_upsert(
 
 @mcp.tool(annotations=_ann(read_only=False, idempotent=False))
 async def story_append(world: str, text: str, role: str = "narration", delta: Optional[dict] = None) -> dict:
-    """Record one turn and apply what it changed, atomically and undoably.
+    """Record turn / registrar turno, guardar escena, anotar lo que pasó.
+
+    Applies what it changed, atomically and undoably.
     `role`: narration, action, dialogue, ooc, roll or system. `delta` keys
     (all optional; refer to things by id or exact name):
     {"new_entities": [{"kind": "character", "name": "Nadia", "summary": "..."}],
@@ -198,7 +210,9 @@ async def story_append(world: str, text: str, role: str = "narration", delta: Op
 
 @mcp.tool(annotations=_ann(read_only=False, idempotent=False))
 async def dice_roll(expression: str, reason: Optional[str] = None, world: Optional[str] = None) -> dict:
-    """Roll dice and write the result to the audited log. Never invent a
+    """Roll dice / tirar dados, tirada, lanzar dados, prueba, dado.
+
+    Writes the result to the audited log. Never invent a
     result — always call this. Grammar: 2d6+3, 4d6kh3 (keep highest),
     2d20kl1, 3d6dl1, 1d6! (exploding), adv(d20), dis(d20), 4dF. Returns
     total, kept and dropped values and a log id. With `world`, the result
@@ -212,7 +226,9 @@ async def dice_roll(expression: str, reason: Optional[str] = None, world: Option
 
 @mcp.tool(annotations=_ann(read_only=False, idempotent=False))
 async def table_roll(world: str, table: str) -> dict:
-    """Roll on a named random table (by id or name), resolving nested
+    """Random table / tabla aleatoria, tirar en la tabla, encuentro aleatorio, rumor.
+
+    By id or name, resolving nested
     `[[Other Table]]` references. Returns the final `text` and the chain
     of tables rolled.
 
@@ -223,7 +239,9 @@ async def table_roll(world: str, table: str) -> dict:
 
 @mcp.tool(annotations=_ann(read_only=False, idempotent=False))  # a note is appended each call
 async def thread_update(world: str, thread: str, status: Optional[str] = None, note: Optional[str] = None) -> dict:
-    """Change a plot thread (by id, short ref like T2, or title): `status`
+    """Update thread / actualizar hilo, resolver trama, avanzar trama, cerrar hilo.
+
+    By id, short ref like T2, or title: `status`
     open, advanced, resolved or abandoned, and/or a `note` appended to its
     notes. Returns the thread. To open a new thread, use story_append's
     thread_changes with {"create": true, "title": "..."}.
@@ -235,7 +253,9 @@ async def thread_update(world: str, thread: str, status: Optional[str] = None, n
 
 @mcp.tool(annotations=_ann(read_only=False, idempotent=False))
 async def clock_tick(world: str, clock: str, ticks: int = 1) -> dict:
-    """Advance a countdown clock (by id, short ref like C1, or name) by
+    """Tick clock / avanzar reloj, marcar segmento, cuenta atrás.
+
+    By id, short ref like C1, or name, by
     `ticks` segments; negative ticks rewind. Clamped to the clock's size.
     Returns filled/segments, `full`, and what happens when full.
 
@@ -246,7 +266,9 @@ async def clock_tick(world: str, clock: str, ticks: int = 1) -> dict:
 
 @mcp.tool(annotations=_ann(read_only=True, idempotent=True))
 async def world_check(world: str, statement: str) -> dict:
-    """Check a statement before making it canon: a dead character acting,
+    """Check consistency / comprobar contradicción, continuidad, es coherente.
+
+    Before making a statement canon: a dead character acting,
     a character somewhere other than where they were last seen, a relation
     contradicting a tracked one, plus an LLM judge over matching facts when
     a model is available (`llm_judge` says whether it ran). Every conflict
@@ -262,7 +284,9 @@ async def world_check(world: str, statement: str) -> dict:
 async def session_export(
     world: str, session: Optional[str] = None, format: str = "md", offset: int = 0, max_chars: int = 6000,
 ) -> dict:
-    """Export as text, a page at a time: a session as a Markdown chapter
+    """Export / exportar capítulo, biblia del mundo, copia de seguridad.
+
+    As text, a page at a time: a session as a Markdown chapter
     (pass `session` id or title), the world bible in Markdown (omit
     `session`; no secrets), or the full JSON dump (format="json"). Returns
     up to `max_chars` (500-20000) from `offset`; when `truncated` is true,
@@ -277,7 +301,9 @@ async def session_export(
 
 @mcp.tool(annotations=_ann(read_only=False, idempotent=False))
 async def story_undo(world: str) -> dict:
-    """Revert the last live turn of the world's current session and
+    """Undo / deshacer último turno, revertir, volver atrás.
+
+    Reverts the last live turn of the world's current session and
     everything its delta changed (created entities, facts, relations and
     threads are removed; updated entities, clocks and threads get their
     previous values). Call again to undo the turn before it. Returns the
