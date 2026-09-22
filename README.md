@@ -139,7 +139,7 @@ them: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 .venv\Scripts\python.exe -m pytest tests/ -q
 ```
 
-293 tests, offline (no real model: Hoard Link, the narrator and the
+294 tests, offline (no real model: Hoard Link, the narrator and the
 Prospero adapter run against `httpx.MockTransport`), in well under a
 minute.
 They cover the dice grammar and its bounds, ruleset readings, the context

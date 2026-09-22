@@ -145,7 +145,7 @@ detrás de todo ello: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 .venv\Scripts\python.exe -m pytest tests/ -q
 ```
 
-293 pruebas, sin red (ningún modelo real: Hoard Link, el narrador y el
+294 pruebas, sin red (ningún modelo real: Hoard Link, el narrador y el
 adaptador de Prospero se prueban contra `httpx.MockTransport`), en
 bastante menos de un minuto. Cubren la gramática de dados y sus topes, la lectura según
 el reglamento, el presupuesto, el orden y la exclusión de secretos del

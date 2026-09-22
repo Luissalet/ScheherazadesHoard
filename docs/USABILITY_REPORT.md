@@ -287,6 +287,57 @@ card), #11 (agent-created clocks), #13 (the "junto a" false positive).
 **Cosmetic:** 22, 23 and 25 fixed above; 24, 26, 27 left (all small,
 none urgent).
 
+## Re-walk after the fixes (second pass)
+
+Both walkthroughs again, on fresh scratch data: the agent one over MCP
+stdio (117 calls, 4.5 s, **66 of 69 checks**, up from 59 of 69 before
+this pass) and the person one in Playwright at 1280x800, 1920x1080 dark
+English and 390x844, with the stand-in model for UC4; every screenshot
+was opened and read. The re-walk found that two step-6 fixes were
+incomplete and a backup lost the play history; those are fixed here,
+each with a regression test (pytest 279 -> 294):
+
+- **#5 not fully fixed.** The chapter left raya dialogue alone only when
+  the turn already began with a dash; what a model actually sends
+  ("No ha vuelto —dice Rosalía—.") was still wrapped in English quotes.
+  A Spanish world, or any line with a raya aside, now gets the opening
+  raya (`645f7f2`).
+- **#1 not fully fixed.** The line-one picker still sent "qué mundos hay"
+  to `world_search`; `story_worlds` now leads with that phrase and a test
+  runs the walkthrough's own picker over all 21 intents (`2f37c53`).
+- **#3 finished.** Play has a scene editor (place, who is present, mood),
+  written as an undoable system turn with a scene delta that never
+  reaches the chapter; the Bible has an edit form (name, status, summary,
+  description, aliases, tags, secrets) over the existing PATCH route, and
+  a bad status there is a 400 instead of a 500 (`7303e98`).
+- **#9 fixed.** A first name that fits one entity resolves ("Nuño",
+  "iria" in a scene); several matches give an error that lists them with
+  ids; upsert and duplicate checks stay exact (`f247409`).
+- **#10 fixed.** `entity_upsert` over MCP forwards `aliases`,
+  `description` and `tags` (`f0aeb1d`).
+- **#12 partly fixed.** `world_search("¿quién ha muerto?")`, "dead",
+  "desaparecidos" list everyone in that state first (`c9c5e3c`); where
+  someone was last seen is still only in `world_check`.
+- **New: a JSON backup lost the sessions.** Import rebuilt the world but
+  dropped every session and turn although the export carried them. It
+  now restores them with scenes remapped and undone turns still undone;
+  no imported session becomes current, since undo snapshots are not
+  carried over (`e7b61fe`).
+
+| Use case | Verdict |
+| --- | --- |
+| UC1 First evening, no model | Works: world, entities, scene set by hand, narration, action and a 2d6 roll, no model asked for |
+| UC2 Long session through MCP | Works: dead refused in scenes and flagged, "Nuño elsewhere" flagged, undo restores state, first names resolve. Caveat: `world_context` returns about 1.5x its budget (#8) |
+| UC3 Clean chapter | Works: titled "Sesión 1", prose, italics for actions, raya dialogue, no ids, JSON, dice, OOC or undone turns, from the UI and paged over MCP. Polish not re-tested with a real model (#14) |
+| UC4 App narrates on its own | Works with caveat: all six sloppy replies parse, no JSON in the story, items reviewable; the scene move is still applied without being shown in the card (#16) |
+| UC5 Continuity questions | Works with caveat: who died, what Iria knows and "is it consistent" are one call each; "where was Nuño last seen" needs `world_check`, and the "junto a Mateo" false positive remains (#13) |
+| UC6 Illustrate with Prospero | Not testable here (Prospero was not running); the button is correctly hidden |
+| UC7 World from notes by an agent | Works: 34 entities with aliases ("la Ciega" resolves), relations, threads, clock; the backup re-imports with its sessions. Caveats: clocks and standalone relations still need the HTTP route or a system turn (#11); the JSON backup pages through the model (#19) |
+| UC8 Fix by hand the next evening | Works with caveat: summary fixed, someone marked missing, threads, clocks, dice log, activity, two-step undo, keyboard, both themes and languages. The map still overlaps labels at 34 entities (#18) and below 760 px there is no navigation (#17) |
+
+Still left from the ranked list: #8, #11, #13-#21 (except #12 in part),
+#24, #26 and #27, for the reasons given above.
+
 ## What already works well
 
 - Dead Mateo was refused in the scene while the rest of the cast stayed;
