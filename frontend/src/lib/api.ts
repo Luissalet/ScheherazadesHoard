@@ -106,10 +106,11 @@ export const api = {
     agent<StoryAppendResult>("story_append", { world, text, ...opts }),
   storyUndo: (world: string) => agent<{ undone_turn_id: string }>("story_undo", { world }),
 
-  sessionExportMd: (world: string, session?: string) =>
-    agent<{ format: string; text: string }>("session_export", { world, session, format: "md" }),
-  sessionExportJson: (world: string) =>
-    agent<Record<string, unknown>>("session_export", { world, format: "json" }),
+  chapter: (world: string, session: string, polish = false) =>
+    post<{ text: string; polished: boolean; reason: string }>(
+      `/api/worlds/${world}/sessions/${encodeURIComponent(session)}/chapter`, { polish }),
+  worldExportJson: (world: string) => get<Record<string, unknown>>(`/api/worlds/${world}/export.json`),
+  worldImportJson: (data: unknown) => post<World>("/api/worlds/import", data),
   bibleMdUrl: (world: string, includeSecrets = false) =>
     `/api/worlds/${world}/bible.md?include_secrets=${includeSecrets}`,
 

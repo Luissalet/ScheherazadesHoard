@@ -24,6 +24,13 @@ Transcript:
 Return only the rewritten prose, no commentary."""
 
 
+POLISH_MAX_CHARS = 6000  # longer chapters would not fit one model reply intact
+
+
+def polish_prompt(chapter_markdown: str) -> str:
+    return _POLISH_PROMPT.format(text=chapter_markdown)
+
+
 def session_to_markdown(conn, world_id: str, session_ref: Optional[str] = None) -> str:
     world = store.get_world(conn, world_id)
     session_id = store.resolve_session_id(conn, world_id, session_ref)
@@ -54,7 +61,7 @@ async def session_to_markdown_polished(
     conn, world_id: str, session_ref: Optional[str], chat_fn: Callable[[str], Awaitable[str]],
 ) -> str:
     raw = session_to_markdown(conn, world_id, session_ref)
-    prompt = _POLISH_PROMPT.format(text=raw)
+    prompt = polish_prompt(raw)
     try:
         polished = await chat_fn(prompt)
     except Exception:

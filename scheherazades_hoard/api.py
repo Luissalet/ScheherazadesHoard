@@ -209,6 +209,12 @@ class SessionExportBody(BaseModel):
     world: str
     session: Optional[str] = None
     format: str = "md"
+    offset: int = 0
+    max_chars: int = 6000
+
+
+class ChapterBody(BaseModel):
+    polish: bool = False
 
 
 class TimelineCreateBody(BaseModel):
@@ -600,6 +606,43 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
             text = export.world_bible_markdown(C(), wid, include_secrets)
         return PlainTextResponse(text, media_type="text/markdown")
 
+    @app.get("/api/worlds/{world}/export.json")
+    async def export_json_ep(world: str):
+        with _db_lock:
+            wid = store.resolve_world_id(C(), world)
+            return export.export_world_json(C(), wid)
+
+    @app.post("/api/worlds/import")
+    async def import_json_ep(body: dict):
+        with _db_lock:
+            try:
+                return export.import_world_json(C(), body)
+            except (KeyError, TypeError) as e:
+                raise HTTPException(400, {"error": "bad_request", "message": f"not a valid world export: missing or wrong {e}"})
+
+    @app.post("/api/worlds/{world}/sessions/{session}/chapter")
+    async def chapter_ep(world: str, session: str, body: ChapterBody):
+        """The session as a Markdown chapter; with `polish`, the shared model
+        smooths the prose (it is told not to add facts). If no model
+        resolves, the plain chapter comes back with the reason."""
+        wid = store.resolve_world_id(C(), world)
+        sid = store.resolve_session_id(C(), wid, session)
+        raw = export.session_to_markdown(C(), wid, sid)
+        if not body.polish:
+            return {"text": raw, "polished": False, "reason": ""}
+        if len(raw) > export.POLISH_MAX_CHARS:
+            return {"text": raw, "polished": False,
+                    "reason": f"too long to polish in one pass ({len(raw)} > {export.POLISH_MAX_CHARS} characters)"}
+        try:
+            result = await L().chat([{"role": "user", "content": export.polish_prompt(raw)}],
+                                    max_tokens=3000, temperature=0.3)
+        except (backend.Unavailable, backend.BackendError) as e:
+            return {"text": raw, "polished": False, "reason": str(e)}
+        if not result.text.strip():
+            return {"text": raw, "polished": False, "reason": "the model returned an empty text"}
+        return {"text": result.text.strip() + "\n", "polished": True,
+                "reason": f"polished by {result.model or result.provider}"}
+
     @app.get("/api/prospero/available")
     async def prospero_available_ep():
         return {"available": await prospero.is_available()}
@@ -753,13 +796,27 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     @agent_call("session_export")
     async def a_session_export(body: SessionExportBody):
         wid = store.resolve_world_id(C(), body.world)
+        if body.format not in ("md", "json"):
+            raise ValueError("format must be 'md' or 'json'")
         if body.format == "json":
-            return export.export_world_json(C(), wid)
-        if body.session:
+            text = db.dumps(export.export_world_json(C(), wid))
+            kind = "world_json"
+        elif body.session:
             text = export.session_to_markdown(C(), wid, body.session)
+            kind = "chapter"
         else:
             text = export.world_bible_markdown(C(), wid)
-        return {"format": "md", "text": text}
+            kind = "bible"
+        # Page through long exports instead of flooding the model's context.
+        max_chars = max(500, min(body.max_chars, 20000))
+        offset = max(0, body.offset)
+        chunk = text[offset:offset + max_chars]
+        end = offset + len(chunk)
+        return {
+            "format": body.format, "kind": kind, "text": chunk, "offset": offset,
+            "total_chars": len(text), "truncated": end < len(text),
+            "next_offset": end if end < len(text) else None,
+        }
 
     @app.post("/api/agent/story_undo")
     @agent_call("story_undo")

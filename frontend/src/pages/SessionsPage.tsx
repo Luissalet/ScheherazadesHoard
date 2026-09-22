@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, Users } from "lucide-react";
+import { Download, Sparkles, Users } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
@@ -38,11 +38,17 @@ export function SessionsPage({ world, lang }: { world: World; lang: Lang }) {
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   }, [world.id]);
 
-  async function exportChapter(session: Session) {
-    setBusy(session.id);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function exportChapter(session: Session, polish = false) {
+    setBusy(polish ? `${session.id}:polish` : session.id);
+    setNotice(null);
+    setError(null);
     try {
-      const result = await api.sessionExportMd(world.id, session.id);
-      downloadText(`${session.title || session.id}.md`, result.text);
+      const result = await api.chapter(world.id, session.id, polish);
+      downloadText(`${session.title || session.id}${result.polished ? " (pulido)" : ""}.md`, result.text);
+      // Say plainly when the model was not used, and why.
+      if (polish && !result.polished) setNotice(`${t("export_polish_fallback", lang)}: ${result.reason}`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -62,7 +68,7 @@ export function SessionsPage({ world, lang }: { world: World; lang: Lang }) {
   async function exportWorldJson() {
     setBusy("world-json");
     try {
-      const data = await api.sessionExportJson(world.id);
+      const data = await api.worldExportJson(world.id);
       downloadJson(`${world.name || world.id}.json`, data);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -86,6 +92,7 @@ export function SessionsPage({ world, lang }: { world: World; lang: Lang }) {
       </div>
 
       {error && <div style={{ marginBottom: 8 }}><ErrorBanner message={error} /></div>}
+      {notice && <p className="notice" style={{ marginBottom: 8 }}>{notice}</p>}
       {sessions === null && <p>{t("loading", lang)}</p>}
       {sessions && sessions.length === 0 && <EmptyState icon={<Users size={28} />}>{t("sessions_empty", lang)}</EmptyState>}
 
@@ -106,9 +113,15 @@ export function SessionsPage({ world, lang }: { world: World; lang: Lang }) {
                 <td>{new Date(s.started_at * 1000).toLocaleString(lang === "es" ? "es-ES" : "en-US")}</td>
                 <td>{s.ended_at ? new Date(s.ended_at * 1000).toLocaleString(lang === "es" ? "es-ES" : "en-US") : "—"}</td>
                 <td>
-                  <button className="btn btn-sm" disabled={busy === s.id} onClick={() => exportChapter(s)}>
-                    <Download size={13} /> {t("export_chapter", lang)}
-                  </button>
+                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                    <button className="btn btn-sm" disabled={busy === s.id} onClick={() => exportChapter(s)}>
+                      <Download size={13} /> {t("export_chapter", lang)}
+                    </button>
+                    <button className="btn btn-sm" disabled={busy === `${s.id}:polish`} onClick={() => exportChapter(s, true)}
+                      title={t("export_polish", lang)}>
+                      <Sparkles size={13} className={busy === `${s.id}:polish` ? "spin" : ""} /> {t("export_polish", lang)}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

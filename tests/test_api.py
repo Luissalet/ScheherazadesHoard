@@ -244,9 +244,12 @@ def test_session_export_bible_when_no_session_given(world, client):
 
 
 def test_session_export_json_full_dump(world, client):
-    r = client.post("/api/agent/session_export", json={"world": world["id"], "format": "json"})
+    import json
+    r = client.post("/api/agent/session_export", json={"world": world["id"], "format": "json", "max_chars": 20000})
     assert r.status_code == 200
-    assert r.json()["format"] == "scheherazades-hoard-world-export"
+    body = r.json()
+    assert body["kind"] == "world_json" and body["truncated"] is False
+    assert json.loads(body["text"])["format"] == "scheherazades-hoard-world-export"
 
 
 # --- audit trail & backend -------------------------------------------------
@@ -459,3 +462,55 @@ def test_setup_logging_writes_a_rotating_utf8_log(tmp_path):
         for name in ("scheherazades_hoard", "uvicorn.error"):
             logging.getLogger(name).removeHandler(handler)
         handler.close()
+
+
+def test_session_export_pages_long_text(world, client):
+    for i in range(40):
+        _upsert(client, world, kind="lore", name=f"Leyenda {i}", summary="x" * 150)
+    first = client.post("/api/agent/session_export", json={"world": world["id"], "max_chars": 1000}).json()
+    assert first["kind"] == "bible" and len(first["text"]) == 1000 and first["truncated"] is True
+    second = client.post("/api/agent/session_export", json={
+        "world": world["id"], "max_chars": 1000, "offset": first["next_offset"],
+    }).json()
+    assert second["offset"] == 1000 and second["text"] != first["text"]
+
+
+def test_world_json_export_import_round_trip_over_http(world, client):
+    _upsert(client, world, kind="character", name="Iria", secrets="heredera")
+    data = client.get(f"/api/worlds/{world['id']}/export.json").json()
+    imported = client.post("/api/worlds/import", json=data).json()
+    assert imported["name"].endswith("(imported)")
+    e = client.post("/api/agent/entity_get", json={"world": imported["id"], "ref": "Iria", "include_secrets": True}).json()
+    assert e["secrets"] == "heredera"
+    bad = client.post("/api/worlds/import", json={"format": "other"})
+    assert bad.status_code == 400
+
+
+def _mock_link(handler):
+    import httpx
+    from scheherazades_hoard.backend import Link, LinkConfig
+    env = {"HOARD_LLM_URL": "http://127.0.0.1:8081/v1/chat/completions", "HOARD_LLM_MODEL": "m"} if handler else {}
+
+    def refuse(request):
+        raise httpx.ConnectError("refused", request=request)
+
+    return Link(LinkConfig.load(None, env=env), client=httpx.AsyncClient(transport=httpx.MockTransport(handler or refuse)))
+
+
+def test_chapter_plain_and_polished(world, client):
+    import httpx
+    client.post("/api/agent/story_append", json={"world": world["id"], "text": "La niebla sube."})
+    session = client.get(f"/api/worlds/{world['id']}/sessions").json()[0]
+    url = f"/api/worlds/{world['id']}/sessions/{session['id']}/chapter"
+
+    plain = client.post(url, json={}).json()
+    assert "La niebla sube." in plain["text"] and plain["polished"] is False
+
+    client.app.state.link = _mock_link(None)  # nothing resolves
+    r = client.post(url, json={"polish": True}).json()
+    assert r["polished"] is False and "llm unavailable" in r["reason"] and "La niebla sube." in r["text"]
+
+    client.app.state.link = _mock_link(lambda req: httpx.Response(
+        200, json={"choices": [{"message": {"content": "La niebla subía, lenta."}}]}))
+    r = client.post(url, json={"polish": True}).json()
+    assert r == {"text": "La niebla subía, lenta.\n", "polished": True, "reason": "polished by m"}

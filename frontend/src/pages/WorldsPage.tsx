@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Plus, Users } from "lucide-react";
+import { BookOpen, Plus, Upload, Users } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
@@ -41,14 +41,36 @@ export function WorldsPage({
     }
   }
 
+  async function importFile(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const data = JSON.parse(await file.text());
+      const world = await api.worldImportJson(data);
+      onCreated();
+      onSelect(world.id);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 style={{ fontSize: 18, margin: 0 }}>{t("worlds_title", lang)}</h1>
         {!creating && (
-          <button className="btn btn-primary" onClick={() => setCreating(true)}>
-            <Plus size={14} /> {t("worlds_new", lang)}
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <label className="btn" style={{ cursor: busy ? "default" : "pointer" }}>
+              <Upload size={14} /> {t("worlds_import", lang)}
+              <input type="file" accept="application/json,.json" hidden disabled={busy}
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importFile(f); }} />
+            </label>
+            <button className="btn btn-primary" onClick={() => setCreating(true)}>
+              <Plus size={14} /> {t("worlds_new", lang)}
+            </button>
+          </div>
         )}
       </div>
 

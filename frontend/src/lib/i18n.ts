@@ -79,6 +79,9 @@ const dict = {
   export_chapter: { es: "Exportar capítulo (Markdown)", en: "Export chapter (Markdown)" },
   export_bible: { es: "Exportar biblia del mundo", en: "Export world bible" },
   export_json: { es: "Exportar mundo (JSON)", en: "Export world (JSON)" },
+  export_polish: { es: "Capítulo pulido por el modelo", en: "Chapter polished by the model" },
+  export_polish_fallback: { es: "Se descargó sin pulir", en: "Downloaded unpolished" },
+  worlds_import: { es: "Importar mundo (JSON)", en: "Import world (JSON)" },
 
   dice_empty: { es: "Aún no se ha tirado ningún dado.", en: "No dice rolled yet." },
   dice_roll_button: { es: "Tirar dados", en: "Roll dice" },

@@ -698,3 +698,11 @@ table.simple th {
   text-underline-offset: 2px;
 }
 .link-button:hover { text-decoration-color: var(--accent); }
+
+.notice {
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--text);
+}
