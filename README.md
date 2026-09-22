@@ -5,7 +5,7 @@
 [Español](README.es.md) · [Quick start](#quick-start) · [Connect to Faustus](#connect-it-to-faustus) · [MCP reference](docs/MCP.md) · [Portfolio](https://luissalet.github.io/Portfolio/#projects)
 
 ![The Play screen, mid-scene, with the dice tray and threads/clocks panel](docs/media/02-play.png)
-*Actual application, demo data ("El Archipiélago de Sal", an original setting seeded by `--demo`).*
+*The real application with synthetic demo data ("El Archipiélago de Sal", an original setting seeded by `--demo`).*
 
 ## Why
 
@@ -37,10 +37,10 @@ narrates while this app remembers everything.
 
 ## Use cases
 
-Eight scenarios from a real writer's evenings, each walked in the browser
-and over MCP before and after the usability pass
-([docs/USE_CASES.md](docs/USE_CASES.md), findings in
-[docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md)):
+Eight scenarios for a solo player who also writes, each walked in the
+browser and over MCP before and after the usability review
+([docs/USE_CASES.md](docs/USE_CASES.md); findings and a verdict per use
+case in [docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md)). Among them:
 
 - **First evening without a model:** create a world, its people and
   places, set the scene and play it by hand, dice included.
@@ -61,7 +61,11 @@ and over MCP before and after the usability pass
 
 The app declares itself with `faustus-plugin.json`. Start the app, then in
 Faustus: **Connectors → Nearby apps → Add**. Faustus finds it by scanning
-loopback ports and reading that manifest.
+loopback ports and reading that manifest, which also tells it how to start
+the app (`python -m scheherazades_hoard --no-browser`, ready when
+`/api/health` answers) and how to launch the MCP server
+(`python scheherazades_hoard/mcp_server.py` over stdio, with
+`SCHEHERAZADE_URL` pointing at the running app).
 
 Two ways to play, same world: connected, Faustus is the narrator and uses
 the tools below (the `narrator-loop` skill tells it in which order); on
@@ -89,7 +93,8 @@ found through Hoard Link, so nothing is loaded twice.
 
 Full argument lists, return shapes and limits: [`docs/MCP.md`](docs/MCP.md).
 
-It also works with any other MCP client over stdio:
+It also works with any other MCP client over stdio (on Linux/macOS the
+interpreter is `.venv/bin/python`):
 
 ```json
 {
@@ -147,16 +152,50 @@ real `data/`, so you can try everything without touching (or needing) any
 real data. Drop `--demo` for your own worlds; add `--no-browser` to skip
 the automatic tab.
 
+## Shared models (Hoard Link)
+
+The app never starts or loads a model of its own. It uses
+[Hoard Link](https://github.com/Luissalet/HoardLink), vendored
+byte-identical in `scheherazades_hoard/hoard_link/` (version in
+`VENDORED.txt`), to find the language model that is already running:
+explicit settings from the Settings screen or `HOARD_*` environment
+variables first, then the model Faustus already uses, then resident
+models on loopback (llama.cpp, Ollama, any OpenAI-compatible server).
+When nothing answers, Settings says why and everything except
+"Narrate", "Polish" and the continuity judge keeps working.
+
 ## Architecture
+
+```mermaid
+flowchart LR
+  UI["React UI<br/>(frontend/dist)"] -->|REST| API["FastAPI app<br/>127.0.0.1:8816"]
+  AI["Faustus or any<br/>MCP client"] -->|stdio| MCP["mcp_server.py"]
+  MCP -->|loopback HTTP<br/>/api/agent/*| API
+  API --> Core["context · delta · consistency<br/>dice · export"]
+  Core --> DB[("SQLite + FTS5<br/>data/")]
+  API -->|Hoard Link| LLM["Local model server"]
+  API -.->|optional| P["Prospero's Hoard<br/>(illustrations)"]
+```
 
 Modules, data model, the atomic delta engine, and the decisions behind
 them: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-## Tests
+## Development
 
-```
+```powershell
+.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
 .venv\Scripts\python.exe -m pytest tests/ -q
+cd frontend; npm ci; npm run build
 ```
+
+```bash
+.venv/bin/python -m pip install -r requirements-lock.txt
+.venv/bin/python -m pytest tests/ -q
+cd frontend && npm ci && npm run build
+```
+
+The same commands run in CI (`.github/workflows/ci.yml`: Ubuntu,
+Python 3.12, Node 22).
 
 294 tests, offline (no real model: Hoard Link, the narrator and the
 Prospero adapter run against `httpx.MockTransport`), in well under a
@@ -178,7 +217,7 @@ right tool for Spanish requests.
 `npm run build` (inside `frontend/`) runs `tsc -b && vite build` with
 TypeScript strict mode, `noUnusedLocals` and `noUnusedParameters` on.
 
-## Privacy and limits
+## Privacy and security
 
 - Binds `127.0.0.1` only, rejects other Host headers and cross-site
   writes, and refuses to be framed by web pages. No telemetry. The only
@@ -188,45 +227,51 @@ TypeScript strict mode, `noUnusedLocals` and `noUnusedParameters` on.
   `data/logs/app.log` and records tool names and timings, never story
   text, secrets or tokens.
 - Agent tools never return GM secrets unless asked with
-  `include_secrets=true`; "Assistant activity" lists every agent call,
-  and your own clicks in the interface are kept out of it.
+  `include_secrets=true`; every agent call is written to an audit table
+  (`agent_calls`: tool, ok/error, duration) that "Assistant activity"
+  shows, and your own clicks in the interface are kept out of it.
 - The narrator's structured output is parsed from free text; a reply
   that cannot be parsed is kept as narration marked `unparsed`, never
   guessed at.
 
 ## Roadmap / known limits
 
-From the project's own design notes
+Open items from the project's own design notes
 ([docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md)), roughly in order
-of value for a follow-up pass:
+of value:
 
-- First-name resolution for `entity_get` and scene references is not
-  complete everywhere `world_check` already understands it.
-- `world_context`'s budget accounting double-counts content that also
-  appears in `scene`, `lore`, `threads` and `recent_turns`.
+- `world_context` returns about 1.5 times its character budget, because
+  the `scene`, `lore`, `threads` and `recent_turns` fields repeat what
+  the brief already says.
 - An agent cannot create a clock or add a standalone relation/fact
   outside of a turn; both need the HTTP route today.
 - "Where was X last seen" has no direct tool answer outside
   `world_check`.
+- `story_append` over MCP has no `rolls` argument, so a roll the model
+  makes is logged but not linked to its turn.
+- `thread_update` needs a thread's id or full title; part of a title
+  does not match.
 - The proposal card in Play shows facts, updates and clock ticks but not
   a proposed scene move, cast or mood change.
 - The relations map uses a fixed circular layout that overlaps labels
   once a world has 30+ entities, and does not visually distinguish dead
   or missing entities.
 - Below 760px there is no way to open the navigation sidebar.
+- Play always opens at the top of the transcript, so a long session
+  needs a scroll to reach the latest turn.
 - A JSON world backup over MCP pages a large string through the model's
   context; importing through the UI does not have this limit.
-- Some rejection and status messages are still English-only in an
-  otherwise Spanish session (roll bands, some Backends reasons, the
-  default "Session 1" title in English worlds).
+- Some messages are still English-only in an otherwise Spanish session:
+  delta rejections ("… is dead and cannot act"), raw roll bands
+  (`weak_hit`), status badges and some Backends reasons.
 - `world_check`'s dead-acting rule has a false positive when a dead
   character is only mentioned, not acting.
 - The polished-chapter route does not check the model's reply for
   length or truncation before it can replace the original chapter, and
   refuses to polish chapters over 6000 characters.
 
-None of these block using the app today — see the use cases and their
-verdicts above and in [docs/USE_CASES.md](docs/USE_CASES.md).
+None of these block using the app today — see the verdict per use case
+in [docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md#re-walk-after-the-fixes-second-pass).
 
 ## License
 

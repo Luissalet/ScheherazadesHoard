@@ -5,7 +5,7 @@
 [English](README.md) · [Inicio rápido](#inicio-rápido) · [Conectar con Faustus](#conectar-con-faustus) · [Referencia MCP](docs/MCP.md) · [Portfolio](https://luissalet.github.io/Portfolio/#projects)
 
 ![La pantalla Jugar, a mitad de escena, con la bandeja de dados y el panel de hilos y relojes](docs/media/02-play-es.png)
-*Aplicación real, con datos de demostración ("El Archipiélago de Sal", un escenario original generado por `--demo`).*
+*La aplicación real con datos de demostración sintéticos («El Archipiélago de Sal», un escenario original que genera `--demo`).*
 
 ## Por qué
 
@@ -39,15 +39,16 @@ aplicación lo recuerda todo.
 
 ## Casos de uso
 
-Ocho escenarios de las noches de un escritor real, recorridos en el
-navegador y por MCP antes y después de la revisión de usabilidad
-([docs/USE_CASES.md](docs/USE_CASES.md), hallazgos en
-[docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md)):
+Ocho escenarios para alguien que juega en solitario y además escribe,
+recorridos en el navegador y por MCP antes y después de la revisión de
+usabilidad ([docs/USE_CASES.md](docs/USE_CASES.md); hallazgos y un
+veredicto por caso en [docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md)).
+Entre ellos:
 
 - **Primera noche sin modelo:** crear un mundo, su gente y sus lugares,
   fijar la escena y jugarla a mano, con dados.
 - **Una noche larga narrada por un modelo local a través de Faustus:** 44
-  momentos en español en los que los muertos siguen muertos, cada cual
+  turnos en español en los que los muertos siguen muertos, cada cual
   sigue donde se le vio por última vez y un turno malo se puede deshacer.
 - **Un capítulo limpio para el manuscrito:** la sesión exportada como
   prosa y diálogo con raya, sin ids, dados ni líneas fuera de personaje.
@@ -64,7 +65,12 @@ navegador y por MCP antes y después de la revisión de usabilidad
 
 La aplicación se declara con `faustus-plugin.json`. Arranca la
 aplicación y, en Faustus: **Conectores → Aplicaciones cercanas → Añadir**.
-Faustus la encuentra escaneando puertos locales y leyendo ese manifiesto.
+Faustus la encuentra escaneando puertos locales y leyendo ese manifiesto,
+que también le dice cómo arrancar la aplicación
+(`python -m scheherazades_hoard --no-browser`, lista cuando responde
+`/api/health`) y cómo lanzar el servidor MCP
+(`python scheherazades_hoard/mcp_server.py` por stdio, con
+`SCHEHERAZADE_URL` apuntando a la aplicación en marcha).
 
 Dos formas de jugar con el mismo mundo: conectada, Faustus hace de
 narrador y usa las herramientas de abajo (la skill `narrator-loop` le
@@ -94,7 +100,8 @@ carga dos veces.
 Argumentos completos, forma de la respuesta y límites:
 [`docs/MCP.md`](docs/MCP.md).
 
-También funciona con cualquier otro cliente MCP por stdio:
+También funciona con cualquier otro cliente MCP por stdio (en Linux y
+macOS el intérprete es `.venv/bin/python`):
 
 ```json
 {
@@ -153,21 +160,56 @@ cd frontend && npm ci && npm run build && cd ..
 ningún dato real. Quita `--demo` para tus propios mundos; añade
 `--no-browser` para que no abra la pestaña automáticamente.
 
+## Modelos compartidos (Hoard Link)
+
+La aplicación nunca arranca ni carga un modelo propio. Usa
+[Hoard Link](https://github.com/Luissalet/HoardLink), incluido byte a
+byte en `scheherazades_hoard/hoard_link/` (la versión figura en
+`VENDORED.txt`), para encontrar el modelo de lenguaje que ya está en
+marcha: primero la configuración explícita de Ajustes o de las variables
+de entorno `HOARD_*`, luego el modelo que ya usa Faustus y después los
+modelos cargados en local (llama.cpp, Ollama o cualquier servidor
+compatible con OpenAI). Si no responde ninguno, Ajustes explica por qué
+y todo sigue funcionando salvo «Narrar», el pulido y el juez de
+coherencia.
+
 ## Arquitectura
+
+```mermaid
+flowchart LR
+  UI["Interfaz React<br/>(frontend/dist)"] -->|REST| API["Aplicación FastAPI<br/>127.0.0.1:8816"]
+  AI["Faustus u otro<br/>cliente MCP"] -->|stdio| MCP["mcp_server.py"]
+  MCP -->|HTTP por loopback<br/>/api/agent/*| API
+  API --> Core["context · delta · consistency<br/>dice · export"]
+  Core --> DB[("SQLite + FTS5<br/>data/")]
+  API -->|Hoard Link| LLM["Servidor de modelos local"]
+  API -.->|opcional| P["Prospero's Hoard<br/>(ilustraciones)"]
+```
 
 Módulos, modelo de datos, el motor de cambios atómico y las decisiones
 detrás de todo ello: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-## Pruebas
+## Desarrollo
 
-```
+```powershell
+.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
 .venv\Scripts\python.exe -m pytest tests/ -q
+cd frontend; npm ci; npm run build
 ```
+
+```bash
+.venv/bin/python -m pip install -r requirements-lock.txt
+.venv/bin/python -m pytest tests/ -q
+cd frontend && npm ci && npm run build
+```
+
+Los mismos comandos se ejecutan en la integración continua
+(`.github/workflows/ci.yml`: Ubuntu, Python 3.12, Node 22).
 
 294 pruebas, sin red (ningún modelo real: Hoard Link, el narrador y el
 adaptador de Prospero se prueban contra `httpx.MockTransport`), en
-bastante menos de un minuto. Cubren la gramática de dados y sus topes, la lectura según
-el reglamento, el presupuesto, el orden y la exclusión de secretos del
+bastante menos de un minuto. Cubren la gramática de dados y sus topes,
+la lectura según el reglamento, el presupuesto, el orden y la exclusión de secretos del
 constructor de contexto, la validación del delta, el turno en una sola
 transacción y el deshacer (también con varias actualizaciones de lo mismo
 en un delta), la continuidad de la escena, la extracción de JSON
@@ -187,7 +229,7 @@ peticiones en español.
 con TypeScript en modo estricto y `noUnusedLocals` y `noUnusedParameters`
 activados.
 
-## Privacidad y límites
+## Privacidad y seguridad
 
 - Solo escucha en `127.0.0.1`, rechaza otras cabeceras Host y las
   escrituras desde otros sitios, y no se deja incrustar en páginas web.
@@ -198,29 +240,31 @@ activados.
   el log es `data/logs/app.log` y guarda nombres de herramientas y
   tiempos, nunca texto de la historia, secretos ni tokens.
 - Las herramientas del agente no devuelven secretos del máster salvo que
-  se pidan con `include_secrets=true`; «Actividad del asistente» lista
-  cada llamada del agente, y tus propios clics en la interfaz no aparecen
-  ahí.
+  se pidan con `include_secrets=true`; cada llamada del agente queda en
+  una tabla de auditoría (`agent_calls`: herramienta, éxito o error,
+  duración) que muestra «Actividad del asistente», y tus propios clics en
+  la interfaz no aparecen ahí.
 - La salida estructurada del narrador se extrae de texto libre; una
   respuesta que no se puede interpretar se guarda como narración marcada
   `unparsed`, nunca se rellena a ciegas.
 
 ## Hoja de ruta / límites conocidos
 
-De las notas de diseño del propio proyecto
-([docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md)), más o menos en
-orden de valor para una siguiente revisión:
+Pendientes según las notas de diseño del propio proyecto
+([docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md)), más o menos por
+orden de prioridad:
 
-- La resolución por nombre de pila en `entity_get` y en referencias de
-  escena no está completa en todos los sitios donde `world_check` ya la
-  entiende.
-- El presupuesto de caracteres de `world_context` cuenta dos veces
-  contenido que también aparece en `scene`, `lore`, `threads` y
-  `recent_turns`.
+- `world_context` devuelve alrededor de 1,5 veces su presupuesto de
+  caracteres, porque los campos `scene`, `lore`, `threads` y
+  `recent_turns` repiten lo que ya dice el resumen.
 - Un agente no puede crear un reloj ni añadir una relación o un hecho
   suelto fuera de un turno; ambas cosas necesitan hoy la ruta HTTP.
 - «¿Dónde se vio a X por última vez?» no tiene una herramienta directa
   fuera de `world_check`.
+- `story_append` por MCP no tiene argumento `rolls`, así que una tirada
+  del modelo queda registrada pero no enlazada a su turno.
+- `thread_update` necesita el id o el título completo del hilo; una parte
+  del título no basta.
 - La tarjeta de propuesta en Jugar muestra hechos, actualizaciones y
   avances de reloj, pero no un cambio de escena, reparto o ambiente
   propuesto.
@@ -228,21 +272,24 @@ orden de valor para una siguiente revisión:
   etiquetas a partir de unas 30 entidades, y no distingue visualmente a
   los muertos o desaparecidos.
 - Por debajo de 760px no hay forma de abrir la barra de navegación.
+- Jugar siempre se abre al principio de la transcripción, así que en una
+  sesión larga hay que desplazarse hasta el último turno.
 - Una copia de seguridad del mundo en JSON por MCP pagina una cadena
   larga a través del modelo; importar desde la interfaz no tiene ese
   límite.
-- Algunos mensajes de rechazo y de estado siguen solo en inglés dentro de
-  una sesión en español (bandas de tirada, algunos motivos en Backends,
-  el título por defecto «Session 1» en mundos ingleses).
+- Algunos mensajes siguen solo en inglés dentro de una sesión en
+  español: los rechazos del delta («… is dead and cannot act»), las
+  bandas de tirada sin traducir (`weak_hit`), las etiquetas de estado y
+  algunos motivos en Backends.
 - La regla de «muerto que actúa» de `world_check` da un falso positivo
   cuando un personaje muerto solo se menciona, sin actuar.
 - La ruta del capítulo pulido no comprueba la longitud ni un posible
   corte de la respuesta del modelo antes de poder sustituir el capítulo
   original, y se niega a pulir capítulos de más de 6000 caracteres.
 
-Ninguno de estos límites impide usar la aplicación hoy — ver los casos de
-uso y sus veredictos más arriba y en
-[docs/USE_CASES.md](docs/USE_CASES.md).
+Ninguno de estos límites impide usar la aplicación hoy: el veredicto de
+cada caso de uso está en
+[docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md#re-walk-after-the-fixes-second-pass).
 
 ## Licencia
 
