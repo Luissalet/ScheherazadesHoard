@@ -33,3 +33,24 @@ def test_sessions_page_can_start_and_rename_a_session():
     assert "api.renameSession" in sessions_page
     api_ts = (FRONTEND_SRC / "lib" / "api.ts").read_text(encoding="utf-8")
     assert "startSession:" in api_ts and "renameSession:" in api_ts
+
+
+def test_bible_can_edit_an_existing_entity():
+    """Usability report #3 (second half): the Bible must let a person fix
+    a summary or mark someone dead/missing, through the existing PATCH
+    route, not only create new entities."""
+    bible = (FRONTEND_SRC / "pages" / "BiblePage.tsx").read_text(encoding="utf-8")
+    assert "api.patchEntity(" in bible
+    for field in ("status", "summary", "description", "aliases", "tags"):
+        assert f"{field}:" in bible
+    i18n = (FRONTEND_SRC / "lib" / "i18n.ts").read_text(encoding="utf-8")
+    assert "entity_status_missing" in i18n and "bible_edit" in i18n
+
+
+def test_play_can_set_the_scene_without_a_model():
+    """Usability report #3 (first half): Play must let a person set where
+    the scene is, who is present and the mood, as an undoable system turn
+    with a scene delta."""
+    play = (FRONTEND_SRC / "pages" / "PlayPage.tsx").read_text(encoding="utf-8")
+    assert "function SceneEditor" in play
+    assert 'role: "system"' in play and "delta: { scene: {" in play

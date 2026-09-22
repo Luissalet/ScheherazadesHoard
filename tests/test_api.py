@@ -548,3 +548,46 @@ def test_agent_session_start_and_rename(world, client):
         "world": world["id"], "session": r2.json()["id"], "title": "Segunda noche",
     })
     assert r3.status_code == 200 and r3.json()["title"] == "Segunda noche"
+
+
+# --- a person fixes things by hand (usability report #3) -------------------
+
+def test_bible_edit_marks_someone_missing_and_fixes_the_summary(world, client):
+    wid = world["id"]
+    e = client.post(f"/api/worlds/{wid}/entities", json={"kind": "character", "name": "Álvaro Méndez"}).json()
+    r = client.patch(f"/api/worlds/{wid}/entities/{e['ref']}", json={
+        "status": "desaparecido", "summary": "Pescador; no volvió del faro.", "aliases": ["el Mudo"],
+    })
+    assert r.status_code == 200, r.text
+    got = client.get(f"/api/worlds/{wid}/entities/el Mudo").json()
+    assert got["status"] == "missing" and got["summary"] == "Pescador; no volvió del faro."
+
+
+def test_bible_edit_with_a_bad_status_is_a_readable_400(world, client):
+    wid = world["id"]
+    e = client.post(f"/api/worlds/{wid}/entities", json={"kind": "character", "name": "Nadia"}).json()
+    r = client.patch(f"/api/worlds/{wid}/entities/{e['ref']}", json={"status": "zombi"})
+    assert r.status_code == 400
+    assert "unknown entity status" in r.text
+
+
+def test_scene_set_by_hand_is_an_undoable_system_turn_left_out_of_the_chapter(world, client):
+    wid = world["id"]
+    place = client.post(f"/api/worlds/{wid}/entities", json={"kind": "location", "name": "Hospicio"}).json()
+    iria = client.post(f"/api/worlds/{wid}/entities", json={"kind": "character", "name": "Iria Castro"}).json()
+    r = client.post("/api/agent/story_append", json={
+        "world": wid, "text": "Escena: Hospicio · Iria Castro · tenso", "role": "system", "author": "user",
+        "delta": {"scene": {"location": place["ref"], "present": [iria["ref"]], "mood": "tenso"}},
+    })
+    assert r.status_code == 200, r.text
+    ctx = client.post("/api/agent/world_context", json={"world": wid}).json()
+    assert ctx["scene"]["location"]["name"] == "Hospicio"
+    assert [p["name"] for p in ctx["scene"]["present"]] == ["Iria Castro"]
+    assert ctx["scene"]["mood"] == "tenso"
+    turn = client.post("/api/agent/story_append", json={"world": wid, "text": "La puerta cruje.", "role": "narration"}).json()
+    chapter = client.post("/api/agent/session_export", json={"world": wid, "session": turn["session_id"]}).json()
+    assert "La puerta cruje." in chapter["text"] and "Escena:" not in chapter["text"]
+    client.post("/api/agent/story_undo", json={"world": wid})
+    client.post("/api/agent/story_undo", json={"world": wid})
+    ctx = client.post("/api/agent/world_context", json={"world": wid}).json()
+    assert ctx["scene"]["location"] is None

@@ -519,6 +519,8 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
                 return store.update_entity(C(), wid, ref, **body.model_dump(exclude_none=True))
             except store.NotFound as e:
                 raise HTTPException(404, {"error": "not_found", "message": str(e)})
+            except ValueError as e:  # an unknown status, an empty name
+                raise HTTPException(400, {"error": "bad_request", "message": str(e)})
 
     @app.get("/api/worlds/{world}/relations")
     async def list_relations_ep(world: str, entity: Optional[str] = None):

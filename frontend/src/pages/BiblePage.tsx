@@ -1,15 +1,100 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Eye, EyeOff, Lock, Plus, Search } from "lucide-react";
+import { BookOpen, Eye, EyeOff, Lock, Pencil, Plus, Search } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { DictKey, Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
-import type { Entity, EntityKind, World } from "../lib/types";
+import type { Entity, EntityKind, EntityStatus, World } from "../lib/types";
 import { Badge, EmptyState, ErrorBanner, Field } from "../components/ui";
 
 const KINDS: EntityKind[] = ["character", "location", "faction", "item", "lore", "creature"];
 
+const STATUSES: EntityStatus[] = ["alive", "dead", "missing", "destroyed", "active", "unknown"];
+
 function kindLabel(kind: EntityKind, lang: Lang): string {
   return t(`bible_kind_${kind}` as DictKey, lang);
+}
+
+export function statusLabel(status: EntityStatus, lang: Lang): string {
+  return STATUSES.includes(status) ? t(`entity_status_${status}` as DictKey, lang) : status;
+}
+
+const splitList = (text: string) => text.split(",").map((x) => x.trim()).filter(Boolean);
+
+type EditDraft = {
+  name: string; status: EntityStatus; summary: string; description: string;
+  aliases: string; tags: string; secrets: string;
+};
+
+function draftOf(e: Entity): EditDraft {
+  return {
+    name: e.name, status: e.status, summary: e.summary, description: e.description,
+    aliases: e.aliases.join(", "), tags: e.tags.join(", "), secrets: e.secrets ?? "",
+  };
+}
+
+/** Edit an existing entity by hand: the same PATCH route the agent's
+ * entity_upsert ends in, so a person can fix what the model got wrong. */
+function EntityEditForm({ world, entity, lang, withSecrets, onSaved, onCancel }: {
+  world: World; entity: Entity; lang: Lang; withSecrets: boolean;
+  onSaved: (e: Entity) => void; onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState<EditDraft>(() => draftOf(entity));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (key: keyof EditDraft) => (ev: { target: { value: string } }) =>
+    setDraft((d) => ({ ...d, [key]: ev.target.value }));
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const body: Partial<Entity> = {
+        name: draft.name, status: draft.status, summary: draft.summary, description: draft.description,
+        aliases: splitList(draft.aliases), tags: splitList(draft.tags),
+      };
+      if (withSecrets) body.secrets = draft.secrets;
+      onSaved(await api.patchEntity(world.id, entity.ref, body));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="entity-edit" onSubmit={(ev) => { ev.preventDefault(); save(); }}>
+      {error && <div style={{ marginBottom: 8 }}><ErrorBanner message={error} /></div>}
+      <Field label={t("world_name", lang)}>
+        <input value={draft.name} onChange={set("name")} autoFocus />
+      </Field>
+      <Field label={t("bible_field_status", lang)}>
+        <select value={draft.status} onChange={set("status")}>
+          {STATUSES.map((st) => <option key={st} value={st}>{statusLabel(st, lang)}</option>)}
+        </select>
+      </Field>
+      <Field label={t("bible_field_summary", lang)}>
+        <textarea rows={2} value={draft.summary} onChange={set("summary")} />
+      </Field>
+      <Field label={t("bible_field_description", lang)}>
+        <textarea rows={4} value={draft.description} onChange={set("description")} />
+      </Field>
+      <Field label={t("bible_field_aliases", lang)}>
+        <input value={draft.aliases} onChange={set("aliases")} />
+      </Field>
+      <Field label={t("bible_field_tags", lang)}>
+        <input value={draft.tags} onChange={set("tags")} />
+      </Field>
+      {withSecrets && (
+        <Field label={t("bible_secrets", lang)}>
+          <textarea rows={2} value={draft.secrets} onChange={set("secrets")} />
+        </Field>
+      )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button type="submit" className="btn btn-primary btn-sm" disabled={busy || !draft.name.trim()}>{t("save", lang)}</button>
+        <button type="button" className="btn btn-sm" onClick={onCancel}>{t("cancel", lang)}</button>
+      </div>
+    </form>
+  );
 }
 
 export function BiblePage({ world, lang }: { world: World; lang: Lang }) {
@@ -24,6 +109,7 @@ export function BiblePage({ world, lang }: { world: World; lang: Lang }) {
   const [newKind, setNewKind] = useState<EntityKind>("character");
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   async function loadList() {
     try {
@@ -43,6 +129,7 @@ export function BiblePage({ world, lang }: { world: World; lang: Lang }) {
   }, [world.id]);
 
   useEffect(() => {
+    setEditing(false);
     if (!selectedRef) {
       setDetail(null);
       return;
@@ -156,13 +243,31 @@ export function BiblePage({ world, lang }: { world: World; lang: Lang }) {
                 <div className="tag-row">
                   <Badge>{kindLabel(detail.kind, lang)}</Badge>
                   <Badge kind="accent">{detail.ref}</Badge>
-                  {detail.status !== "unknown" && <Badge kind="gold">{detail.status}</Badge>}
+                  {detail.status !== "unknown" && <Badge kind={detail.status === "dead" || detail.status === "missing" ? "danger" : "gold"}>{statusLabel(detail.status, lang)}</Badge>}
                 </div>
               </div>
-              <button className="icon-button" onClick={() => setShowSecrets((v) => !v)} title={t("bible_show_secrets", lang)}>
-                {showSecrets ? <Eye size={16} /> : <EyeOff size={16} />}
-              </button>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button className="icon-button" onClick={() => setEditing((v) => !v)} title={t("bible_edit", lang)} aria-label={t("bible_edit", lang)}>
+                  <Pencil size={15} />
+                </button>
+                <button className="icon-button" onClick={() => setShowSecrets((v) => !v)} title={t("bible_show_secrets", lang)} aria-label={t("bible_show_secrets", lang)}>
+                  {showSecrets ? <Eye size={16} /> : <EyeOff size={16} />}
+                </button>
+              </div>
             </div>
+
+            {editing && (
+              <EntityEditForm
+                key={detail.ref + String(showSecrets)}
+                world={world} entity={detail} lang={lang} withSecrets={showSecrets}
+                onCancel={() => setEditing(false)}
+                onSaved={async (saved) => {
+                  setEditing(false);
+                  await loadList();
+                  setDetail(await api.getEntity(world.id, saved.ref, showSecrets));
+                }}
+              />
+            )}
 
             {detail.aliases.length > 0 && (
               <p style={{ color: "var(--text-muted)", fontSize: 12 }}>{detail.aliases.join(", ")}</p>

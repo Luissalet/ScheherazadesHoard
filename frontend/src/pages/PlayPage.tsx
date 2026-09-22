@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
-import { Dices, Eye, EyeOff, Image as ImageIcon, ShieldCheck, Sparkles, Undo2 } from "lucide-react";
+import { Dices, Eye, EyeOff, Image as ImageIcon, MapPin, ShieldCheck, Sparkles, Undo2 } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
-import type { NarrateResult, Session, Turn, TurnRole, World, WorldCheckResult, WorldContextResult } from "../lib/types";
+import type { Entity, NarrateResult, Session, Turn, TurnRole, World, WorldCheckResult, WorldContextResult } from "../lib/types";
 import { Badge, ConfirmButton, ErrorBanner } from "../components/ui";
 
 const QUICK_ROLLS = ["1d20", "2d6", "1d100", "4dF", "1d6"];
@@ -29,6 +29,85 @@ function TurnView({ turn }: { turn: Turn }) {
     );
   }
   return <div className={turnClass(turn.role, turn.undone)}>{turn.text}</div>;
+}
+
+const GONE = new Set(["dead", "destroyed", "missing"]);
+
+/** Set the scene by hand — where it is, who is present, the mood — with
+ * no model. It is written as a system turn carrying a scene delta, so it
+ * is undoable like any other turn and never reaches the chapter. */
+function SceneEditor({ world, lang, ctx, onApplied, onCancel }: {
+  world: World; lang: Lang; ctx: WorldContextResult | null;
+  onApplied: () => Promise<void>; onCancel: () => void;
+}) {
+  const [entities, setEntities] = useState<Entity[] | null>(null);
+  const [location, setLocation] = useState(ctx?.scene.location?.ref ?? "");
+  const [present, setPresent] = useState<string[]>(ctx?.scene.present.map((e) => e.ref) ?? []);
+  const [mood, setMood] = useState(ctx?.scene.mood ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.listEntities(world.id).then(setEntities).catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+  }, [world.id]);
+
+  const places = (entities ?? []).filter((e) => e.kind === "location");
+  const cast = (entities ?? []).filter((e) => (e.kind === "character" || e.kind === "creature") && !GONE.has(e.status));
+
+  async function apply() {
+    setBusy(true);
+    setError(null);
+    try {
+      const byRef = new Map((entities ?? []).map((e) => [e.ref, e.name]));
+      const parts = [
+        location ? byRef.get(location) ?? location : t("play_scene_no_location", lang),
+        present.map((r) => byRef.get(r) ?? r).join(", "),
+        mood.trim(),
+      ].filter(Boolean);
+      await api.storyAppend(world.id, `${t("play_scene_turn", lang)}: ${parts.join(" · ")}`, {
+        role: "system", author: "user", delta: { scene: { location: location || null, present, mood: mood.trim() } },
+      });
+      await onApplied();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="scene-editor" style={{ marginTop: 8 }}>
+      {error && <div style={{ marginBottom: 8 }}><ErrorBanner message={error} /></div>}
+      <label className="field-inline">
+        <span>{t("play_location", lang)}</span>
+        <select value={location} onChange={(e) => setLocation(e.target.value)} aria-label={t("play_location", lang)}>
+          <option value="">{t("play_scene_no_location", lang)}</option>
+          {places.map((e) => <option key={e.ref} value={e.ref}>{e.name}</option>)}
+        </select>
+      </label>
+      <div className="panel-title" style={{ marginTop: 8 }}>{t("play_present", lang)}</div>
+      <div className="scene-cast">
+        {cast.map((e) => (
+          <label key={e.ref} className="scene-cast-item">
+            <input
+              type="checkbox"
+              checked={present.includes(e.ref)}
+              onChange={(ev) => setPresent((p) => ev.target.checked ? [...p, e.ref] : p.filter((r) => r !== e.ref))}
+            />
+            <span>{e.name}</span>
+          </label>
+        ))}
+      </div>
+      <label className="field-inline" style={{ marginTop: 8 }}>
+        <span>{t("play_mood", lang)}</span>
+        <input value={mood} onChange={(e) => setMood(e.target.value)} aria-label={t("play_mood", lang)} />
+      </label>
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <button className="btn btn-primary btn-sm" disabled={busy || entities === null} onClick={apply}>{t("play_scene_apply", lang)}</button>
+        <button className="btn btn-sm" onClick={onCancel}>{t("cancel", lang)}</button>
+      </div>
+    </div>
+  );
 }
 
 type DeltaSelection = Record<string, boolean[]>;
@@ -71,6 +150,7 @@ export function PlayPage({ world, lang, onWorldChanged }: { world: World; lang: 
   const [diceExpr, setDiceExpr] = useState("1d20");
   const [illustrating, setIllustrating] = useState(false);
   const [image, setImage] = useState<string | null>(null);
+  const [editingScene, setEditingScene] = useState(false);
 
   const refresh = useCallback(async () => {
     const [sessions, context] = await Promise.all([
@@ -306,10 +386,25 @@ export function PlayPage({ world, lang, onWorldChanged }: { world: World; lang: 
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div className="panel-title" style={{ margin: 0 }}>{t("play_scene", lang)}</div>
-            <button className="icon-button" onClick={() => setGmView((v) => !v)} title="toggle GM view">
-              {gmView ? <Eye size={14} /> : <EyeOff size={14} />}
-            </button>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button className="icon-button" onClick={() => setEditingScene((v) => !v)} title={t("play_scene_edit", lang)} aria-label={t("play_scene_edit", lang)}>
+                <MapPin size={14} />
+              </button>
+              <button className="icon-button" onClick={() => setGmView((v) => !v)} title={gmView ? t("play_gm_view", lang) : t("play_player_view", lang)}>
+                {gmView ? <Eye size={14} /> : <EyeOff size={14} />}
+              </button>
+            </div>
           </div>
+          {ctx && !ctx.scene.location && ctx.scene.present.length === 0 && !ctx.scene.mood && !editingScene && (
+            <p style={{ margin: "4px 0", fontSize: 12, color: "var(--text-muted)" }}>{t("play_scene_empty", lang)}</p>
+          )}
+          {editingScene && (
+            <SceneEditor
+              world={world} lang={lang} ctx={ctx}
+              onCancel={() => setEditingScene(false)}
+              onApplied={async () => { setEditingScene(false); await refresh(); onWorldChanged(); }}
+            />
+          )}
           {ctx?.scene.location && <p style={{ margin: "4px 0" }}><strong>{t("play_location", lang)}:</strong> {ctx.scene.location.name}</p>}
           {ctx?.scene.mood && <p style={{ margin: "4px 0" }}><strong>{t("play_mood", lang)}:</strong> {ctx.scene.mood}</p>}
           <div className="tag-row" style={{ marginTop: 8 }}>

@@ -742,3 +742,42 @@ label.btn {
   .play-layout { height: auto; }
   .transcript { overflow-y: visible; }
 }
+
+/* Scene editor (Play) and entity edit form (Bible) */
+.field-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.field-inline select,
+.field-inline input {
+  width: 100%;
+}
+.scene-cast {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.scene-cast-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.entity-edit {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+}
+.entity-edit input,
+.entity-edit select,
+.entity-edit textarea {
+  width: 100%;
+}
