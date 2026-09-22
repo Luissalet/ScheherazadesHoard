@@ -64,7 +64,7 @@ exact name.
 | `world_context(world, focus=None, include_secrets=False, budget_chars=3000)` | yes | yes | the narrator's brief, see below |
 | `world_search(world, query, kinds=None, limit=8)` | yes | yes | `{entities: [{id, ref, kind, name, status, summary}], facts: [{id, ref, text, canon}], has_more}`; `limit` ≤ 25; never secrets |
 | `entity_get(world, ref, include_secrets=False)` | yes | yes | `{id, ref, kind, name, aliases, status, summary, description, fields, tags, parent_id, relations: [{id, type, direction, other_ref, other_name, note, since}], facts: [10 newest], facts_has_more, secrets?}` |
-| `entity_upsert(world, kind, name, fields=None, summary=None, secrets=None, status=None)` | no | yes | `{id, ref, kind, name, status, summary, created}` |
+| `entity_upsert(world, kind, name, fields=None, summary=None, secrets=None, status=None, aliases=None, description=None, tags=None)` | no | yes | `{id, ref, kind, name, status, summary, created}` |
 | `story_append(world, text, role="narration", delta=None)` | no | no | `{turn_id, turn_index, session_id, role, scene, applied, rejected}` |
 | `dice_roll(expression, reason=None, world=None)` | no | no | `{log_id, expression, total, detail, kept, dropped, seed, band? , natural?, crit?}` |
 | `table_roll(world, table)` | no | no | `{text, rolls: [{table, entry}], seed}` |

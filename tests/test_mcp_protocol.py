@@ -225,3 +225,22 @@ async def test_secrets_and_compact_results_over_mcp(live_app_url):
             assert roll["band"] in ("miss", "weak_hit", "strong_hit")
             bad = await session.call_tool("story_append", {"world": world["id"], "text": "x", "role": "narrator"})
             assert bad.isError is True and "bad_request: unknown turn role" in _text(bad)
+
+
+async def test_entity_upsert_keeps_aliases_sent_over_mcp(live_app_url):
+    # Usability report #10: the HTTP route took aliases but the MCP tool
+    # signature did not, so the call "succeeded" and the nickname was lost.
+    async with stdio_client(_params(live_app_url)) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            world = json.loads(_text(await session.call_tool("story_world_create", {"name": "Mundo Apodos"})))
+            await session.call_tool("entity_upsert", {
+                "world": world["id"], "kind": "character", "name": "Marta Solís",
+                "aliases": ["la Ciega"], "description": "Vende cerillas en la plaza.", "tags": ["vidente"],
+            })
+            got = await session.call_tool("entity_get", {"world": world["id"], "ref": "la Ciega"})
+            assert got.isError is False, _text(got)
+            detail = json.loads(_text(got))
+            assert detail["name"] == "Marta Solís"
+            assert "la Ciega" in detail["aliases"]
+            assert detail["tags"] == ["vidente"]

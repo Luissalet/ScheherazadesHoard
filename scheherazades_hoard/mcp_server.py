@@ -170,6 +170,8 @@ async def entity_get(world: str, ref: str, include_secrets: bool = False) -> dic
 async def entity_upsert(
     world: str, kind: str, name: str, fields: Optional[dict] = None,
     summary: Optional[str] = None, secrets: Optional[str] = None, status: Optional[str] = None,
+    aliases: Optional[list[str]] = None, description: Optional[str] = None,
+    tags: Optional[list[str]] = None,
 ) -> dict:
     """Create or update entity / crear personaje, nuevo lugar, añadir objeto, actualizar.
 
@@ -178,13 +180,16 @@ async def entity_upsert(
     existing stats/traits, nothing you omit is cleared. `kind`: character,
     location, faction, item, lore, creature (must match an existing
     entity's kind). `status`: alive, dead, missing, destroyed, active,
-    unknown (Spanish forms like "muerta" are accepted). Returns the short
-    entity with its ref and `created`.
+    unknown (Spanish forms like "muerta" are accepted). `aliases` are
+    nicknames the entity also answers to ("la Ciega"); `description` is the
+    long text, `tags` free labels. Returns the short entity with its ref
+    and `created`.
 
     Keywords: create character, new location, update entity, add item, crear personaje, nuevo lugar, actualizar personaje, añadir objeto, cambiar estado
     """
     payload: dict[str, Any] = {"world": world, "kind": kind, "name": name}
-    for key, value in (("fields", fields), ("summary", summary), ("secrets", secrets), ("status", status)):
+    for key, value in (("fields", fields), ("summary", summary), ("secrets", secrets), ("status", status),
+                       ("aliases", aliases), ("description", description), ("tags", tags)):
         if value is not None:
             payload[key] = value
     return await _call("entity_upsert", payload)
