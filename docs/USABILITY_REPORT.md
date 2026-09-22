@@ -202,6 +202,91 @@ confirmed from live tests on a real machine.
     continuity result is showing.
 27. Narrar without a model leaves a console error (the expected 503).
 
+## Fixes (first pass)
+
+Small commits, each with a regression test; `pytest` went from 240 to
+279 passing, `npm run build`, the MCP protocol test and the manifest
+test all stayed green throughout. Commit hashes are on `main`.
+
+**Blockers**
+
+1. **Fixed** (`783e74c`). Every tool's docstring now leads with a short
+   bilingual summary line ("Roll dice / tirar dados, ...") instead of a
+   wrapped English fragment, so a picker that only reads the first ~120
+   characters of line one still finds the right tool in Spanish. Test:
+   `tests/test_mcp_tool_discovery.py` reproduces the exact naive
+   word-matching picker from the walkthrough against all 16 tools.
+2. **Fixed** (`dee8b39`). `jsonx.extract_json_span` now normalises curly
+   quotes, strips `//`/`/* */` comments, accepts a payload nested under
+   a key like `"delta"` (new `prefer_keys` parameter), and repairs an
+   object cut off mid-value by keeping the complete items before the
+   cut and closing what was left open. `narrator.py` passes
+   `DELTA_KEYS` as `prefer_keys` (so an earlier stray or duplicate JSON
+   block no longer wins) and no longer leaves a dangling ```` ```json ````
+   marker in the narration when the model never closes the fence. All
+   four sloppy shapes from the report now parse; tests in
+   `tests/test_jsonx.py` and `tests/test_narrator.py`.
+3. **Partially fixed** (`fd7c0d4`). Play now has a Narración mode tab
+   alongside Acción/Diálogo/Fuera de personaje, reusing the existing
+   `story_append` plumbing — verified live with Playwright (tab
+   appears, typed narration is recorded and rendered as prose, no
+   console errors). Left: setting the scene (place/cast/mood) from Play,
+   and editing an existing Bible entity (status/summary/aliases). Both
+   are real features, not bug fixes — a scene-editor form and an
+   entity-edit form each need their own design, review and tests, and
+   cramming them in was more likely to produce something half-baked than
+   something a person would actually want to use. Left for a follow-up
+   pass; the PATCH route Bible editing needs already exists
+   (`api.py`'s `patch_entity_ep`).
+4. **Fixed** (`33cc78f`). When every name given for `scene.present` is
+   rejected (unknown, dead, ...), the previous cast now carries forward
+   instead of being replaced by an empty list. Test:
+   `test_one_unknown_name_does_not_empty_an_existing_cast` in
+   `tests/test_delta.py`.
+5. **Fixed** (`e9c698b`). The exported chapter drops roll and
+   out-of-character turns entirely, renders actions in italics instead
+   of a blockquote, and leaves Spanish raya dialogue untouched instead
+   of wrapping it in English curly quotes. A session's auto-generated
+   title is now localized ("Sesión 1" in a Spanish world). Tests in
+   `tests/test_export.py` and `tests/test_store.py`.
+6. **Fixed** (`c983c63`, `10076f7`). `POST /api/worlds/{world}/sessions`
+   and `PATCH .../sessions/{session}` (plus the matching `session_start`
+   and `session_rename` MCP tools) let a session be started and named,
+   from the API/MCP and, since `10076f7`, from the Sesiones screen
+   itself (a "Nueva sesión" button and an inline rename control) —
+   verified live with Playwright: create with a title, create with the
+   localized default, rename, no console errors. Tests in
+   `tests/test_api.py`, `tests/test_store.py`,
+   `tests/test_mcp_protocol.py`.
+7. **Fixed** (`3b470ba`). `frontend/public/favicon.svg` linked from
+   `index.html`, the same mark replacing the sidebar's generic Feather
+   glyph, and both READMEs now show it next to the title. Test:
+   `tests/test_branding.py`.
+
+**Annoying**
+
+22. **Fixed** (`6cd6603`). Activity now has a Hora/Time column and
+    durations round to whole ms instead of 13 decimals.
+23. **Fixed** (`6cd6603`). The Worlds card shows "1 entidad" / "1 hilo
+    abierto" (singular) instead of the plural form at count 1.
+25. **Fixed** (`6cd6603`). `mcp_server.py` sets the `httpx` logger to
+    WARNING, so a tool call no longer prints an INFO line to stderr.
+    Test: `test_httpx_request_logging_is_quiet_on_stdio`.
+8–21 (except 9, partially touched by #4's fix in spirit but not
+directly), 24, 26, 27: **left**. Each needs either a product decision
+(#8's budget accounting, #14's polish-safety threshold, #16's proposal
+UI, #18's map layout, #20's full bilingual audit) or backend work of a
+size that did not fit alongside the blockers under "small commits" —
+none of them block a person or an agent from using the app today, which
+is why the blockers came first. They are unchanged from the numbered
+list above and are good candidates for the next pass, roughly in this
+order of value: #9 (first-name resolution — quick, high value), #12
+(status/last-seen search), #16 (show the scene move in the proposal
+card), #11 (agent-created clocks), #13 (the "junto a" false positive).
+
+**Cosmetic:** 22, 23 and 25 fixed above; 24, 26, 27 left (all small,
+none urgent).
+
 ## What already works well
 
 - Dead Mateo was refused in the scene while the rest of the cast stayed;
