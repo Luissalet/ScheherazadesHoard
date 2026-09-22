@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, Sparkles, Users } from "lucide-react";
+import { Check, Download, Pencil, Plus, Sparkles, Users, X } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
@@ -31,14 +31,58 @@ export function SessionsPage({ world, lang }: { world: World; lang: Lang }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  useEffect(() => {
+  function reload() {
     setSessions(null);
-    api.listSessions(world.id)
+    return api.listSessions(world.id)
       .then((list) => setSessions([...list].sort((a, b) => b.started_at - a.started_at)))
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world.id]);
 
   const [notice, setNotice] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  async function createSession() {
+    setBusy("new-session");
+    setError(null);
+    try {
+      await api.startSession(world.id, newTitle.trim());
+      setNewTitle("");
+      setCreating(false);
+      await reload();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function startRename(s: Session) {
+    setRenamingId(s.id);
+    setRenameValue(s.title || "");
+  }
+
+  async function saveRename(id: string) {
+    if (!renameValue.trim()) return;
+    setBusy(`${id}:rename`);
+    setError(null);
+    try {
+      await api.renameSession(world.id, id, renameValue.trim());
+      setRenamingId(null);
+      await reload();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function exportChapter(session: Session, polish = false) {
     setBusy(polish ? `${session.id}:polish` : session.id);
@@ -82,6 +126,9 @@ export function SessionsPage({ world, lang }: { world: World; lang: Lang }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 style={{ fontSize: 18, margin: 0 }}>{t("nav_sessions", lang)}</h1>
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-sm btn-primary" disabled={busy === "new-session"} onClick={() => setCreating((v) => !v)}>
+            <Plus size={13} /> {t("sessions_new", lang)}
+          </button>
           <button className="btn btn-sm" disabled={busy === "bible"} onClick={exportBible}>
             <Download size={13} /> {t("export_bible", lang)}
           </button>
@@ -90,6 +137,25 @@ export function SessionsPage({ world, lang }: { world: World; lang: Lang }) {
           </button>
         </div>
       </div>
+
+      {creating && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input
+            autoFocus
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder={t("sessions_new_title_placeholder", lang)}
+            onKeyDown={(e) => e.key === "Enter" && createSession()}
+            style={{ flex: 1 }}
+          />
+          <button className="btn btn-sm btn-primary" disabled={busy === "new-session"} onClick={createSession}>
+            <Check size={13} />
+          </button>
+          <button className="btn btn-sm" onClick={() => { setCreating(false); setNewTitle(""); }}>
+            <X size={13} />
+          </button>
+        </div>
+      )}
 
       {error && <div style={{ marginBottom: 8 }}><ErrorBanner message={error} /></div>}
       {notice && <p className="notice" style={{ marginBottom: 8 }}>{notice}</p>}
@@ -109,7 +175,38 @@ export function SessionsPage({ world, lang }: { world: World; lang: Lang }) {
           <tbody>
             {sessions.map((s) => (
               <tr key={s.id}>
-                <td>{s.title || s.id}</td>
+                <td>
+                  {renamingId === s.id ? (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && saveRename(s.id)}
+                        style={{ flex: 1 }}
+                        aria-label={t("sessions_rename_title", lang)}
+                      />
+                      <button className="icon-button" disabled={busy === `${s.id}:rename`} onClick={() => saveRename(s.id)}>
+                        <Check size={13} />
+                      </button>
+                      <button className="icon-button" onClick={() => setRenamingId(null)}>
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ) : (
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {s.title || s.id}
+                      <button
+                        className="icon-button"
+                        title={t("sessions_rename", lang)}
+                        aria-label={t("sessions_rename", lang)}
+                        onClick={() => startRename(s)}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    </span>
+                  )}
+                </td>
                 <td>{new Date(s.started_at * 1000).toLocaleString(lang === "es" ? "es-ES" : "en-US")}</td>
                 <td>{s.ended_at ? new Date(s.ended_at * 1000).toLocaleString(lang === "es" ? "es-ES" : "en-US") : "—"}</td>
                 <td>

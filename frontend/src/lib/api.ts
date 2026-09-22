@@ -88,6 +88,9 @@ export const api = {
     agent<{ text: string; rolls: { table: string; entry: string }[] }>("table_roll", { world, table }),
 
   listSessions: (world: string) => get<Session[]>(`/api/worlds/${world}/sessions`),
+  startSession: (world: string, title = "") => post<Session>(`/api/worlds/${world}/sessions`, { title }),
+  renameSession: (world: string, session: string, title: string) =>
+    patch<Session>(`/api/worlds/${world}/sessions/${encodeURIComponent(session)}`, { title }),
   listTurns: (world: string, session: string) => get<Turn[]>(`/api/worlds/${world}/sessions/${session}/turns`),
 
   listDiceLog: (world: string, limit = 30) => get<DiceLogEntry[]>(`/api/worlds/${world}/dice_log?limit=${limit}`),
