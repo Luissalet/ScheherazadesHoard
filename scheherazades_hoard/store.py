@@ -1059,8 +1059,35 @@ def search_world(
         entity_hits = [_decode_entity(dict(r)) for r in conn.execute(sql, params)]
     except sqlite3.OperationalError:
         entity_hits = []
+    # "¿quién ha muerto?", "missing": a status word finds everyone in that
+    # state, first. Only the states a question is about; "alive" would list
+    # the whole cast.
+    statuses = _statuses_asked(query)
+    if statuses:
+        sql = f"SELECT * FROM entities WHERE world_id = ? AND status IN ({','.join('?' * len(statuses))})"
+        params = [world_id, *sorted(statuses)]
+        if kinds:
+            sql += f" AND kind IN ({','.join('?' * len(kinds))})"
+            params.extend(kinds)
+        by_status = [_decode_entity(dict(r)) for r in conn.execute(sql + " ORDER BY seq", params)]
+        seen = {e["id"] for e in by_status}
+        entity_hits = (by_status + [e for e in entity_hits if e["id"] not in seen])[: limit + 1]
     fact_hits = search_facts(conn, world_id, query, limit=limit + 1)
     return {"entities": entity_hits, "facts": fact_hits}
+
+
+_SEARCHABLE_STATUS = {"dead", "missing", "destroyed"}
+_STATUS_QUESTION_WORDS = {"murio": "dead", "muerte": "dead", "muertes": "dead", "died": "dead"}
+
+
+def _statuses_asked(query: str) -> set[str]:
+    found = set()
+    for word in re.findall(r"\w+", _norm(query)):
+        for w in (word, word[:-1] if word.endswith("s") else word):
+            status = _STATUS_QUESTION_WORDS.get(w) or _STATUS_ALIASES.get(w) or (w if w in VALID_STATUS else None)
+            if status in _SEARCHABLE_STATUS:
+                found.add(status)
+    return found
 
 
 # ---------------------------------------------------------------------------

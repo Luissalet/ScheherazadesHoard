@@ -142,12 +142,14 @@ async def world_search(world: str, query: str, kinds: Optional[list[str]] = None
     """Search / buscar, encontrar: quién es, dónde está, qué sabemos de.
 
     Find entities and established facts by words (accent-insensitive:
-    "corazon" finds "Corazón"). `kinds` narrows entities to any of
+    "corazon" finds "Corazón"). A status word ("muerto", "dead",
+    "desaparecidos", "missing") lists everyone in that state first, so
+    "¿quién ha muerto?" is one call. `kinds` narrows entities to any of
     character, location, faction, item, lore, creature. Returns up to
     `limit` (max 25) short hits of each with their ids, and `has_more`.
     Secrets are never included; use entity_get for one entity's details.
 
-    Keywords: search, find, look up, who is, where is, buscar, encontrar, quién es, dónde está, qué sabemos de
+    Keywords: search, find, look up, who is, where is, who died, buscar, encontrar, quién es, dónde está, qué sabemos de, quién ha muerto
     """
     return await _call("world_search", {"world": world, "query": query, "kinds": kinds, "limit": limit})
 

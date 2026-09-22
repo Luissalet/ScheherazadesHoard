@@ -197,3 +197,16 @@ def test_upsert_by_first_name_creates_a_new_entity_instead_of_merging(conn, worl
     iria = store.upsert_entity(conn, world["id"], "character", "Iria", summary="otra")
     assert iria["id"] != castro["id"]
     assert store.get_entity(conn, world["id"], castro["id"])["summary"] == ""
+
+
+def test_search_by_status_word_answers_who_is_dead(conn, world):
+    # Usability report #12: "¿quién ha muerto?" found nothing.
+    mateo = store.create_entity(conn, world["id"], "character", "Mateo Lür", status="dead")
+    alvaro = store.create_entity(conn, world["id"], "character", "Álvaro", status="missing")
+    store.create_entity(conn, world["id"], "character", "Iria Castro")
+    for q in ("¿quién ha muerto?", "muertos", "dead"):
+        hits = store.search_world(conn, world["id"], q)["entities"]
+        assert [e["id"] for e in hits] == [mateo["id"]], q
+    hits = store.search_world(conn, world["id"], "desaparecidos")["entities"]
+    assert [e["id"] for e in hits] == [alvaro["id"]]
+    assert store.search_world(conn, world["id"], "vivo")["entities"] == []
