@@ -39,7 +39,7 @@ Reglas para agentes de codificación que trabajen en este repositorio.
 - **Nunca cargues tu propio servidor de modelo.** El backend de modelos
   es compartido: Hoard Link está copiado tal cual en
   `scheherazades_hoard/hoard_link/` (no se edita; para actualizarlo se
-  sustituye la carpeta entera y se anota el commit en `VENDORED.txt`) y
+  sustituye la carpeta entera y se anota la versión en `VENDORED.txt`) y
   `backend.py` es su envoltorio. Si necesitas un modelo, resuélvelo por
   ahí.
 - **Las herramientas del agente devuelven vistas compactas** (`views.py`):

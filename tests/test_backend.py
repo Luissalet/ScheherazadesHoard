@@ -33,7 +33,10 @@ def _link(config: LinkConfig, handler=_refuse) -> Link:
 def test_hoard_link_is_vendored_with_its_provenance():
     assert (VENDORED / "link.py").is_file() and (VENDORED / "LICENSE").is_file()
     text = (VENDORED / "VENDORED.txt").read_text(encoding="utf-8")
-    assert "Commit:" in text
+    assert text.startswith(
+        "Vendored from HoardLink (https://github.com/Luissalet/HoardLink), version "
+    )
+    assert "byte-identical" in text.lower()
     assert backend.Link.__module__.startswith("scheherazades_hoard.hoard_link")
 
 

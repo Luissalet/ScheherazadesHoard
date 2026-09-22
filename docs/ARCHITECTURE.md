@@ -41,7 +41,7 @@ the app's own venv would use for its dependencies.
 | `consistency.py` | `world_check()` — lexical retrieval of candidate facts plus three concrete rules (dead-but-acting, location mismatch, contradicted relation), and an optional LLM-judge pass over the same candidates that must cite real fact ids. |
 | `jsonx.py` | Robust JSON extraction from free-form model text: fenced code blocks, balanced-brace bare-object extraction, trailing-comma repair. Never raises — callers get `None` and treat the narration as `unparsed` instead. |
 | `export.py` | Session → Markdown chapter (the API offers an optional polish by the shared model, which falls back to the plain chapter with the reason), world bible → Markdown (one section per entity kind), and full JSON export/import (format tag `scheherazades-hoard-world-export`), sessions and turns included; undo snapshots are not carried over, so no imported session becomes current. |
-| `hoard_link/` | Hoard Link, the shared model-backend resolver, vendored unmodified (`VENDORED.txt` names the source commit). |
+| `hoard_link/` | Hoard Link, the shared model-backend resolver, vendored unmodified (`VENDORED.txt` names the public source and version). |
 | `backend.py` | This app's thin wrapper over Hoard Link (see below). |
 | `narrator.py` | Standalone-mode narration: builds the system/user prompt from `world_context()` plus the player's action, calls the backend, and splits the model's reply into narration prose and a delta with `jsonx`. |
 | `prospero.py` | Optional illustration adapter — checks `127.0.0.1:8815/api/health` for Prospero's Hoard and, if present, calls its agent API; fails closed (returns `False`/`None`) on any error so this feature never blocks the rest of the app. |

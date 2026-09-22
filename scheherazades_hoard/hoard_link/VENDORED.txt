@@ -1,9 +1,6 @@
-Vendored copy of Hoard Link (the shared model backend resolver).
+Vendored from HoardLink (https://github.com/Luissalet/HoardLink), version 0.1.1
 
-Source:  hoard-link repository, package directory hoard_link/
-Commit:  83951982a5182b65d4eb1b5345b42c0f71863e9c
-Copied:  every .py file of hoard_link/ plus LICENSE, unmodified.
-
-Do not edit these files. The app wraps them in scheherazades_hoard/backend.py.
-To update: replace this directory wholesale with a newer hoard_link/ and
-record the new commit here.
+Byte-identical copy of the upstream hoard_link/ package (every .py file)
+plus its LICENSE. Do not edit these files; the app wraps them in
+scheherazades_hoard/backend.py. To update, replace the whole folder with
+a byte-identical copy of a newer version and change the version above.
