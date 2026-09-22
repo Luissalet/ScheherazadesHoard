@@ -2,7 +2,7 @@
 ### Who's alive? Who's where? What have you promised them?
 **A world-state and continuity keeper for interactive fiction and tabletop play — it remembers everything a language model forgets, and hands the narrator exactly the slice it needs for the next scene.**
 
-[Español](README.es.md) · [Run locally](#run-locally-on-windows) · [Connect an AI](docs/MCP.md) · [Portfolio](https://luissalet.github.io/Portfolio/#projects)
+[Español](README.es.md) · [Quick start](#quick-start) · [Connect to Faustus](#connect-it-to-faustus) · [MCP reference](docs/MCP.md) · [Portfolio](https://luissalet.github.io/Portfolio/#projects)
 
 ![The Play screen, mid-scene, with the dice tray and threads/clocks panel](docs/media/02-play.png)
 *Actual application, demo data ("El Archipiélago de Sal", an original setting seeded by `--demo`).*
@@ -103,7 +103,9 @@ It also works with any other MCP client over stdio:
 }
 ```
 
-## Run locally on Windows
+## Quick start
+
+### Windows
 
 Double-click **`Iniciar Scheherazade's Hoard.cmd`**. It runs
 `scripts/start.ps1`, which finds Python 3.11 or newer, creates `.venv`
@@ -114,13 +116,30 @@ for `/api/health` and opens the browser. If the app is already running it
 only opens the browser. Stop it with **`Detener Scheherazade's Hoard.cmd`**
 (`scripts/stop.ps1`), which also stops an instance Faustus started.
 
-Manual steps, from the repo root, in PowerShell:
+Manual steps, from a fresh clone, in PowerShell:
 
 ```powershell
+git clone https://github.com/Luissalet/ScheherazadesHoard.git
+cd ScheherazadesHoard
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements-lock.txt
 cd frontend; npm ci; npm run build; cd ..
 .venv\Scripts\python.exe -m scheherazades_hoard --demo
+```
+
+### Linux / macOS
+
+The app itself is plain Python + a static frontend build, so it runs the
+same way outside Windows (only the `.cmd` launchers and `scripts/*.ps1`
+are Windows-only):
+
+```bash
+git clone https://github.com/Luissalet/ScheherazadesHoard.git
+cd ScheherazadesHoard
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-lock.txt
+cd frontend && npm ci && npm run build && cd ..
+.venv/bin/python -m scheherazades_hoard --demo
 ```
 
 `--demo` uses a synthetic seeded world in `data-demo/` instead of your
@@ -174,3 +193,41 @@ TypeScript strict mode, `noUnusedLocals` and `noUnusedParameters` on.
 - The narrator's structured output is parsed from free text; a reply
   that cannot be parsed is kept as narration marked `unparsed`, never
   guessed at.
+
+## Roadmap / known limits
+
+From the project's own design notes
+([docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md)), roughly in order
+of value for a follow-up pass:
+
+- First-name resolution for `entity_get` and scene references is not
+  complete everywhere `world_check` already understands it.
+- `world_context`'s budget accounting double-counts content that also
+  appears in `scene`, `lore`, `threads` and `recent_turns`.
+- An agent cannot create a clock or add a standalone relation/fact
+  outside of a turn; both need the HTTP route today.
+- "Where was X last seen" has no direct tool answer outside
+  `world_check`.
+- The proposal card in Play shows facts, updates and clock ticks but not
+  a proposed scene move, cast or mood change.
+- The relations map uses a fixed circular layout that overlaps labels
+  once a world has 30+ entities, and does not visually distinguish dead
+  or missing entities.
+- Below 760px there is no way to open the navigation sidebar.
+- A JSON world backup over MCP pages a large string through the model's
+  context; importing through the UI does not have this limit.
+- Some rejection and status messages are still English-only in an
+  otherwise Spanish session (roll bands, some Backends reasons, the
+  default "Session 1" title in English worlds).
+- `world_check`'s dead-acting rule has a false positive when a dead
+  character is only mentioned, not acting.
+- The polished-chapter route does not check the model's reply for
+  length or truncation before it can replace the original chapter, and
+  refuses to polish chapters over 6000 characters.
+
+None of these block using the app today — see the use cases and their
+verdicts above and in [docs/USE_CASES.md](docs/USE_CASES.md).
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).

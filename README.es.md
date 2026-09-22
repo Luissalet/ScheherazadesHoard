@@ -2,7 +2,7 @@
 ### ¿Quién sigue vivo? ¿Quién está dónde? ¿Qué les has prometido?
 **Un guardián de la coherencia y el estado del mundo para ficción interactiva y partidas de rol — recuerda todo lo que un modelo de lenguaje olvida, y le da al narrador exactamente lo que necesita para la siguiente escena.**
 
-[English](README.md) · [Ejecutar en local](#ejecutar-en-local-en-windows) · [Conectar una IA](docs/MCP.md) · [Portfolio](https://luissalet.github.io/Portfolio/#projects)
+[English](README.md) · [Inicio rápido](#inicio-rápido) · [Conectar con Faustus](#conectar-con-faustus) · [Referencia MCP](docs/MCP.md) · [Portfolio](https://luissalet.github.io/Portfolio/#projects)
 
 ![La pantalla Jugar, a mitad de escena, con la bandeja de dados y el panel de hilos y relojes](docs/media/02-play-es.png)
 *Aplicación real, con datos de demostración ("El Archipiélago de Sal", un escenario original generado por `--demo`).*
@@ -108,7 +108,9 @@ También funciona con cualquier otro cliente MCP por stdio:
 }
 ```
 
-## Ejecutar en local en Windows
+## Inicio rápido
+
+### Windows
 
 Haz doble clic en **`Iniciar Scheherazade's Hoard.cmd`**. Ejecuta
 `scripts/start.ps1`, que busca Python 3.11 o posterior, crea `.venv` e
@@ -120,13 +122,30 @@ estaba en marcha, solo abre el navegador. Detenla con
 **`Detener Scheherazade's Hoard.cmd`** (`scripts/stop.ps1`), que también
 detiene una instancia arrancada por Faustus.
 
-Pasos manuales, desde la raíz del repositorio, en PowerShell:
+Pasos manuales, desde un clon nuevo, en PowerShell:
 
 ```powershell
+git clone https://github.com/Luissalet/ScheherazadesHoard.git
+cd ScheherazadesHoard
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements-lock.txt
 cd frontend; npm ci; npm run build; cd ..
 .venv\Scripts\python.exe -m scheherazades_hoard --demo
+```
+
+### Linux / macOS
+
+La aplicación es Python puro más una interfaz estática compilada, así
+que funciona igual fuera de Windows (solo los lanzadores `.cmd` y
+`scripts/*.ps1` son de Windows):
+
+```bash
+git clone https://github.com/Luissalet/ScheherazadesHoard.git
+cd ScheherazadesHoard
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-lock.txt
+cd frontend && npm ci && npm run build && cd ..
+.venv/bin/python -m scheherazades_hoard --demo
 ```
 
 `--demo` usa un mundo sintético generado en `data-demo/` en vez de tu
@@ -185,3 +204,46 @@ activados.
 - La salida estructurada del narrador se extrae de texto libre; una
   respuesta que no se puede interpretar se guarda como narración marcada
   `unparsed`, nunca se rellena a ciegas.
+
+## Hoja de ruta / límites conocidos
+
+De las notas de diseño del propio proyecto
+([docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md)), más o menos en
+orden de valor para una siguiente revisión:
+
+- La resolución por nombre de pila en `entity_get` y en referencias de
+  escena no está completa en todos los sitios donde `world_check` ya la
+  entiende.
+- El presupuesto de caracteres de `world_context` cuenta dos veces
+  contenido que también aparece en `scene`, `lore`, `threads` y
+  `recent_turns`.
+- Un agente no puede crear un reloj ni añadir una relación o un hecho
+  suelto fuera de un turno; ambas cosas necesitan hoy la ruta HTTP.
+- «¿Dónde se vio a X por última vez?» no tiene una herramienta directa
+  fuera de `world_check`.
+- La tarjeta de propuesta en Jugar muestra hechos, actualizaciones y
+  avances de reloj, pero no un cambio de escena, reparto o ambiente
+  propuesto.
+- El mapa de relaciones usa una disposición circular fija que solapa
+  etiquetas a partir de unas 30 entidades, y no distingue visualmente a
+  los muertos o desaparecidos.
+- Por debajo de 760px no hay forma de abrir la barra de navegación.
+- Una copia de seguridad del mundo en JSON por MCP pagina una cadena
+  larga a través del modelo; importar desde la interfaz no tiene ese
+  límite.
+- Algunos mensajes de rechazo y de estado siguen solo en inglés dentro de
+  una sesión en español (bandas de tirada, algunos motivos en Backends,
+  el título por defecto «Session 1» en mundos ingleses).
+- La regla de «muerto que actúa» de `world_check` da un falso positivo
+  cuando un personaje muerto solo se menciona, sin actuar.
+- La ruta del capítulo pulido no comprueba la longitud ni un posible
+  corte de la respuesta del modelo antes de poder sustituir el capítulo
+  original, y se niega a pulir capítulos de más de 6000 caracteres.
+
+Ninguno de estos límites impide usar la aplicación hoy — ver los casos de
+uso y sus veredictos más arriba y en
+[docs/USE_CASES.md](docs/USE_CASES.md).
+
+## Licencia
+
+MIT — ver [`LICENSE`](LICENSE).
