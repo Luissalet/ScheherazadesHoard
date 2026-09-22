@@ -14,6 +14,9 @@ dependencies = [
     "python-multipart==0.0.20",
 ]
 
+[project.urls]
+Repository = "https://github.com/Luissalet/ScheherazadesHoard"
+
 [project.optional-dependencies]
 dev = [
     "pytest==9.1.1",
