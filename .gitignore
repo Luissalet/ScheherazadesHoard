@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 data/
-data-demo/
+data-*/
 node_modules/
 frontend/dist/
 *.log
@@ -13,4 +13,3 @@ test-results/
 *.egg-info/
 build/
 *.tsbuildinfo
-data-uxtest/
