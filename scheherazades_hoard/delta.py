@@ -47,6 +47,14 @@ def _items(delta: dict, category: str, rejected: list[dict]) -> list[dict]:
     return out
 
 
+def _found(resolver, conn: sqlite3.Connection, world_id: str, ref: str) -> bool:
+    try:
+        resolver(conn, world_id, ref)
+        return True
+    except store.NotFound:
+        return False
+
+
 def _existing_entity(conn: sqlite3.Connection, world_id: str, names: list[str]) -> Optional[dict]:
     for n in names:
         if isinstance(n, str) and n.strip():
@@ -127,6 +135,13 @@ def validate_delta(conn: sqlite3.Connection, world_id: str, delta: dict) -> tupl
         except ValueError as e:
             rejected.append(_reject("entity_updates", item, str(e)))
             continue
+        new_name = item.get("name")
+        if new_name is not None:
+            clash = _existing_entity(conn, world_id, [new_name]) if isinstance(new_name, str) else None
+            target = _existing_entity(conn, world_id, [ref])
+            if not isinstance(new_name, str) or not new_name.strip() or (clash and target and clash["id"] != target["id"]):
+                rejected.append(_reject("entity_updates", item, f"cannot rename to {new_name!r}: empty or already used"))
+                continue
         valid["entity_updates"].append(item)
 
     for item in _items(delta, "relations", rejected):
@@ -162,21 +177,27 @@ def validate_delta(conn: sqlite3.Connection, world_id: str, delta: dict) -> tupl
 
     for item in _items(delta, "thread_changes", rejected):
         ref = item.get("ref")
-        try:
-            store.resolve_thread_id(conn, world_id, ref)
+        status = item.get("status")
+        if status is not None and status not in store.VALID_THREAD_STATUS:
+            rejected.append(_reject("thread_changes", item, f"unknown thread status: {status!r}; use one of "
+                                    + ", ".join(sorted(store.VALID_THREAD_STATUS))))
+            continue
+        if isinstance(ref, str) and _found(store.resolve_thread_id, conn, world_id, ref):
             valid["thread_changes"].append(item)
-        except store.NotFound:
-            if item.get("create") and (item.get("title") or ref):
-                valid["thread_changes"].append(item)
-            else:
-                rejected.append(_reject("thread_changes", item, f"unknown thread: {ref!r}"))
+        elif item.get("create") and isinstance(item.get("title") or ref, str) and (item.get("title") or ref).strip():
+            valid["thread_changes"].append({**item, "ref": ref or item["title"]})
+        else:
+            rejected.append(_reject("thread_changes", item, f"unknown thread: {ref!r} (to open one, pass create: true and a title)"))
 
     for item in _items(delta, "clock_ticks", rejected):
         ref = item.get("ref")
-        try:
-            store.resolve_clock_id(conn, world_id, ref)
+        ticks = item.get("ticks", 1)
+        if isinstance(ticks, bool) or not isinstance(ticks, int):
+            rejected.append(_reject("clock_ticks", item, f"ticks must be a whole number, got {ticks!r}"))
+            continue
+        if isinstance(ref, str) and _found(store.resolve_clock_id, conn, world_id, ref):
             valid["clock_ticks"].append(item)
-        except store.NotFound:
+        else:
             rejected.append(_reject("clock_ticks", item, f"unknown clock: {ref!r}"))
 
     scene = delta.get("scene")

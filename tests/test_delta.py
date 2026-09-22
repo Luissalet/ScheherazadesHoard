@@ -261,3 +261,26 @@ def test_bad_status_in_delta_is_rejected_per_item(conn, world):
     ]})
     assert [e["status"] for e in valid["new_entities"]] == ["alive"]
     assert "zombi" in rejected[0]["reason"]
+
+
+def test_thread_and_clock_items_are_checked_per_item(conn, world, session):
+    th = store.create_thread(conn, world["id"], "El pacto")
+    clock = store.create_clock(conn, world["id"], "Marea", segments=4)
+    turn, result, rejected = _record(conn, world, session, {
+        "thread_changes": [
+            {"ref": th["ref"], "status": "closed"},           # bad status
+            {"title": "Nuevo hilo", "create": True},           # create without ref
+            {"status": "advanced"},                            # no ref at all
+        ],
+        "clock_ticks": [{"ref": clock["ref"], "ticks": "2"}, {"ticks": 1}, {"ref": clock["ref"], "ticks": 2}],
+    })
+    assert len(rejected) == 4
+    assert [t["title"] for t in result["thread_changes"]] == ["Nuevo hilo"]
+    assert store.get_clock(conn, world["id"], clock["ref"])["filled"] == 2
+
+
+def test_rename_onto_another_entity_is_rejected(conn, world):
+    store.create_entity(conn, world["id"], "character", "Iria")
+    b = store.create_entity(conn, world["id"], "character", "Tomás")
+    valid, rejected = delta.validate_delta(conn, world["id"], {"entity_updates": [{"ref": b["ref"], "name": "iria"}]})
+    assert valid["entity_updates"] == [] and "already used" in rejected[0]["reason"]
