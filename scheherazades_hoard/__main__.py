@@ -67,7 +67,18 @@ def main() -> None:
         except Exception:
             pass
 
-    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="info")
+    # The real interpreter's pid, for scripts/stop.ps1: on Windows the
+    # .venv python.exe is a launcher whose own pid does not hold the port.
+    pid_file = Path(data_dir) / "scheherazade.pid"
+    pid_file.write_text(str(os.getpid()), encoding="ascii")
+    try:
+        uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="info")
+    finally:
+        try:
+            if pid_file.read_text(encoding="ascii").strip() == str(os.getpid()):
+                pid_file.unlink()
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
