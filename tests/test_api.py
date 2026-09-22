@@ -267,6 +267,12 @@ def test_backend_status_shape(client):
     assert body["config"]["token_set"] is False
 
 
+def test_prospero_available_false_when_not_running(client):
+    r = client.get("/api/prospero/available")
+    assert r.status_code == 200
+    assert r.json()["available"] is False
+
+
 def test_no_frontend_built_returns_placeholder(client):
     r = client.get("/")
     assert r.status_code == 200

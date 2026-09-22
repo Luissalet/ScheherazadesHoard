@@ -548,6 +548,10 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
             text = export.world_bible_markdown(C(), wid, include_secrets)
         return PlainTextResponse(text, media_type="text/markdown")
 
+    @app.get("/api/prospero/available")
+    async def prospero_available_ep():
+        return {"available": await prospero.is_available()}
+
     @app.post("/api/worlds/{world}/illustrate")
     async def illustrate_ep(world: str, body: dict):
         available = await prospero.is_available()
