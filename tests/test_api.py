@@ -423,3 +423,17 @@ def test_dice_roll_is_compact_and_reads_the_ruleset(world, client):
     assert body["total"] == 8 and body["band"] == "weak_hit"
     assert body["kept"] == [5, 2] and body["dropped"] == []
     assert "dice" not in body
+
+
+def test_validation_errors_use_the_error_shape(world, client):
+    r = client.post("/api/agent/clock_tick", json={"world": world["id"], "ticks": "many"})
+    assert r.status_code == 400
+    body = r.json()
+    assert body["error"] == "bad_request"
+    assert "clock: Field required" in body["message"] and "ticks" in body["message"]
+
+
+@pytest.mark.parametrize("entries", [[], [{"text": "a", "weight": "2"}], [{"text": ""}], ["a"], [{"text": "a", "weight": 0}]])
+def test_bad_table_entries_are_400(world, client, entries):
+    r = client.post(f"/api/worlds/{world['id']}/tables", json={"name": "T", "entries": entries})
+    assert r.status_code in (400,)

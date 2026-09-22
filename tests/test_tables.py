@@ -62,7 +62,12 @@ def test_unknown_table_raises_not_found(conn, world):
         tables.roll_table(conn, world["id"], "No existe", seed=1)
 
 
-def test_empty_table_raises(conn, world):
-    store.create_table(conn, world["id"], "Vacia", [])
-    with pytest.raises(tables.TableError):
-        tables.roll_table(conn, world["id"], "Vacia", seed=1)
+def test_empty_table_is_refused_at_creation(conn, world):
+    # refused when it is written, not later in the middle of a scene
+    with pytest.raises(ValueError):
+        store.create_table(conn, world["id"], "Vacia", [])
+
+
+def test_all_zero_weights_are_refused(conn, world):
+    with pytest.raises(ValueError):
+        store.create_table(conn, world["id"], "Nada", [{"text": "a", "weight": 0}])

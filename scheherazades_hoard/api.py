@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
@@ -305,6 +306,16 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     @app.exception_handler(store.NotFound)
     async def not_found_handler(request: Request, exc: store.NotFound):
         return JSONResponse({"error": "not_found", "message": str(exc)}, status_code=404)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_handler(request: Request, exc: RequestValidationError):
+        # FastAPI's default is {"detail": [...]}; turn it into one sentence a
+        # model can act on, e.g. "world: Field required; ticks: Input should be a valid integer".
+        parts = []
+        for err in exc.errors()[:5]:
+            loc = ".".join(str(x) for x in err.get("loc", ()) if x != "body") or "body"
+            parts.append(f"{loc}: {err.get('msg', 'invalid')}")
+        return JSONResponse({"error": "bad_request", "message": "; ".join(parts) or "invalid request"}, status_code=400)
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError):

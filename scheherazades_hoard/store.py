@@ -711,11 +711,26 @@ def tick_clock(conn: sqlite3.Connection, world_id: str, ref: str, ticks: int = 1
 # Random tables
 # ---------------------------------------------------------------------------
 
-def create_table(conn: sqlite3.Connection, world_id: str, name: str, entries: list[dict]) -> dict:
+def _clean_table_entries(entries: Any) -> list[dict]:
+    if not isinstance(entries, list) or not entries:
+        raise ValueError("a table needs a non-empty list of entries like {\"text\": \"...\", \"weight\": 1}")
+    clean = []
     for e in entries:
-        if "text" not in e:
-            raise ValueError("each table entry needs a 'text' field")
-        e.setdefault("weight", 1)
+        if not isinstance(e, dict) or not isinstance(e.get("text"), str) or not e["text"].strip():
+            raise ValueError("each table entry needs a non-empty 'text' string")
+        weight = e.get("weight", 1)
+        if isinstance(weight, bool) or not isinstance(weight, (int, float)) or weight < 0:
+            raise ValueError(f"entry weight must be a number >= 0, got {weight!r}")
+        clean.append({"text": e["text"].strip(), "weight": weight})
+    if sum(e["weight"] for e in clean) <= 0:
+        raise ValueError("at least one table entry needs a weight above 0")
+    return clean
+
+
+def create_table(conn: sqlite3.Connection, world_id: str, name: str, entries: list[dict]) -> dict:
+    if not name or not name.strip():
+        raise ValueError("table name is required")
+    entries = _clean_table_entries(entries)
     table_id = db.new_id("tbl_")
     ts = db.now()
     conn.execute(
