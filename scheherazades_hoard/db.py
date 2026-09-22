@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS worlds (
 CREATE TABLE IF NOT EXISTS entities (
     id TEXT PRIMARY KEY,
     world_id TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL DEFAULT 0,
     kind TEXT NOT NULL,
     name TEXT NOT NULL,
     aliases_json TEXT NOT NULL DEFAULT '[]',
@@ -52,6 +53,7 @@ CREATE TABLE IF NOT EXISTS entities (
 );
 CREATE INDEX IF NOT EXISTS idx_entities_world ON entities(world_id);
 CREATE INDEX IF NOT EXISTS idx_entities_kind ON entities(world_id, kind);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_seq ON entities(world_id, seq);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
     id UNINDEXED, world_id UNINDEXED,
@@ -76,6 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_relations_b ON relations(b_id);
 CREATE TABLE IF NOT EXISTS facts (
     id TEXT PRIMARY KEY,
     world_id TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL DEFAULT 0,
     text TEXT NOT NULL,
     session_id TEXT,
     turn_id TEXT,
@@ -84,6 +87,7 @@ CREATE TABLE IF NOT EXISTS facts (
     created_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_facts_world ON facts(world_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_facts_seq ON facts(world_id, seq);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
     id UNINDEXED, world_id UNINDEXED, text,
@@ -105,6 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_timeline_world ON timeline_events(world_id);
 CREATE TABLE IF NOT EXISTS threads (
     id TEXT PRIMARY KEY,
     world_id TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL DEFAULT 0,
     title TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'open',
     notes TEXT NOT NULL DEFAULT '',
@@ -112,10 +117,12 @@ CREATE TABLE IF NOT EXISTS threads (
     updated_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_threads_world ON threads(world_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_seq ON threads(world_id, seq);
 
 CREATE TABLE IF NOT EXISTS clocks (
     id TEXT PRIMARY KEY,
     world_id TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL DEFAULT 0,
     name TEXT NOT NULL,
     segments INTEGER NOT NULL DEFAULT 4,
     filled INTEGER NOT NULL DEFAULT 0,
@@ -124,6 +131,7 @@ CREATE TABLE IF NOT EXISTS clocks (
     updated_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_clocks_world ON clocks(world_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_clocks_seq ON clocks(world_id, seq);
 
 CREATE TABLE IF NOT EXISTS random_tables (
     id TEXT PRIMARY KEY,
