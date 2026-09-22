@@ -213,6 +213,12 @@ class SessionExportBody(BaseModel):
     max_chars: int = 6000
 
 
+class IllustrateBody(BaseModel):
+    scene_brief: str = ""
+    location_name: str = ""
+    mood: str = ""
+
+
 class ChapterBody(BaseModel):
     polish: bool = False
 
@@ -310,7 +316,15 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
                     status_code=403,
                 )
         _caller.set("ui" if request.headers.get(UI_CLIENT_HEADER) == "ui" else "agent")
-        return await call_next(request)
+        response = await call_next(request)
+        # Clickjacking: only this app and other loopback apps (Faustus) may
+        # frame the UI, so a web page cannot overlay it and steal clicks.
+        response.headers["Content-Security-Policy"] = (
+            "frame-ancestors 'self' http://127.0.0.1:* http://localhost:*"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
 
     def C() -> Any:
         return app.state.conn
@@ -648,13 +662,11 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
         return {"available": await prospero.is_available()}
 
     @app.post("/api/worlds/{world}/illustrate")
-    async def illustrate_ep(world: str, body: dict):
+    async def illustrate_ep(world: str, body: IllustrateBody):
         available = await prospero.is_available()
         if not available:
             raise HTTPException(503, {"error": "prospero_unavailable", "message": "Prospero's Hoard is not running."})
-        url = await prospero.illustrate_scene(
-            body.get("scene_brief", ""), body.get("location_name", ""), body.get("mood", "")
-        )
+        url = await prospero.illustrate_scene(body.scene_brief, body.location_name, body.mood)
         if not url:
             raise HTTPException(502, {"error": "illustrate_failed", "message": "Prospero could not generate an image."})
         return {"image_url": url}

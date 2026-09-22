@@ -54,3 +54,10 @@ def test_unknown_api_route_is_json_404_not_html(client):
     r = client.get("/api/nope")
     assert r.status_code == 404
     assert r.json()["error"] == "not_found"
+
+
+def test_ui_cannot_be_framed_by_a_web_page(client):
+    r = client.get("/")
+    csp = r.headers["content-security-policy"]
+    assert "frame-ancestors 'self' http://127.0.0.1:* http://localhost:*" == csp.strip()
+    assert r.headers["x-content-type-options"] == "nosniff"

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import sys
 import webbrowser
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -37,6 +38,14 @@ def setup_logging(data_dir: Path) -> logging.Handler:
 
 
 def main() -> None:
+    # start.ps1 redirects the console to files, where Windows uses the ANSI
+    # code page; a data path with characters outside it must not crash the
+    # startup banner or a log line.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass
     parser = argparse.ArgumentParser(prog="scheherazades_hoard")
     parser.add_argument("--port", type=int, default=int(os.environ.get("SCHEHERAZADE_PORT", DEFAULT_PORT)))
     parser.add_argument("--data-dir", type=Path, default=None)
