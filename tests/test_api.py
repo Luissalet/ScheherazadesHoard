@@ -277,3 +277,52 @@ def test_no_frontend_built_returns_placeholder(client):
     r = client.get("/")
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
+
+
+# --- regressions found in review ------------------------------------------
+
+def _upsert(client, world, **body):
+    r = client.post("/api/agent/entity_upsert", json={"world": world["id"], **body})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_entity_upsert_update_keeps_unsent_values(world, client):
+    _upsert(client, world, kind="character", name="Iria", summary="capitana", secrets="es la heredera",
+            fields={"coraje": 2}, status="dead")
+    _upsert(client, world, kind="character", name="Iria", fields={"herida": True})
+    e = client.post("/api/agent/entity_get", json={"world": world["id"], "ref": "Iria", "include_secrets": True}).json()
+    assert e["summary"] == "capitana"
+    assert e["secrets"] == "es la heredera"
+    assert e["status"] == "dead"  # an update must never resurrect a character
+    assert e["fields"] == {"coraje": 2, "herida": True}
+
+
+def test_entity_upsert_by_alias_keeps_canonical_name(world, client):
+    _upsert(client, world, kind="character", name="Tomás Rojas")
+    client.patch(f"/api/worlds/{world['id']}/entities/Tomás Rojas", json={"aliases": ["el Rojo"]})
+    _upsert(client, world, kind="character", name="el Rojo", summary="contrabandista")
+    e = client.post("/api/agent/entity_get", json={"world": world["id"], "ref": "el rojo"}).json()
+    assert e["name"] == "Tomás Rojas"
+    assert e["summary"] == "contrabandista"
+
+
+def test_entity_upsert_refuses_kind_change(world, client):
+    _upsert(client, world, kind="location", name="Puerto Salado")
+    r = client.post("/api/agent/entity_upsert", json={"world": world["id"], "kind": "character", "name": "Puerto Salado"})
+    assert r.status_code == 400
+    assert "already exists as a location" in r.json()["message"]
+
+
+def test_entity_status_accepts_spanish_and_rejects_unknown(world, client):
+    e = _upsert(client, world, kind="character", name="Ulla", status="Muerta")
+    assert e["status"] == "dead"
+    r = client.post("/api/agent/entity_upsert", json={"world": world["id"], "kind": "character", "name": "Ulla", "status": "sleepy"})
+    assert r.status_code == 400
+    assert "alive" in r.json()["message"]
+
+
+def test_not_found_message_is_not_double_quoted(world, client):
+    r = client.post("/api/agent/entity_get", json={"world": world["id"], "ref": "nadie"})
+    assert r.status_code == 404
+    assert r.json()["message"] == "no entity matches 'nadie'"

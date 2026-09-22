@@ -16,6 +16,9 @@ from . import db
 class NotFound(KeyError):
     """A world/entity/thread/... reference did not resolve."""
 
+    def __str__(self) -> str:  # KeyError would wrap the message in quotes
+        return str(self.args[0]) if self.args else "not found"
+
 
 def _strip_accents(text: str) -> str:
     return "".join(
@@ -154,6 +157,32 @@ def update_world(conn: sqlite3.Connection, ref: str, **patch: Any) -> dict:
 
 VALID_KINDS = {"character", "location", "faction", "item", "lore", "creature"}
 VALID_STATUS = {"alive", "dead", "missing", "destroyed", "active", "unknown"}
+# Spanish (and a few English) spellings a model is likely to write, folded
+# to the canonical status the rest of the engine reasons about. Without
+# this, "muerta" would not count as dead and the character could act again.
+_STATUS_ALIASES = {
+    "vivo": "alive", "viva": "alive", "deceased": "dead", "muerto": "dead", "muerta": "dead",
+    "fallecido": "dead", "fallecida": "dead", "desaparecido": "missing", "desaparecida": "missing",
+    "perdido": "missing", "perdida": "missing", "destruido": "destroyed", "destruida": "destroyed",
+    "activo": "active", "activa": "active", "desconocido": "unknown", "desconocida": "unknown",
+}
+
+
+def normalize_status(value: str) -> str:
+    """Canonical entity status, or ValueError listing the accepted values."""
+    folded = _norm(value or "")
+    folded = _STATUS_ALIASES.get(folded, folded)
+    if folded not in VALID_STATUS:
+        raise ValueError(
+            f"unknown entity status: {value!r}; use one of {', '.join(sorted(VALID_STATUS))}"
+        )
+    return folded
+
+
+def validate_kind(kind: str) -> str:
+    if kind not in VALID_KINDS:
+        raise ValueError(f"unknown entity kind: {kind!r}; use one of {', '.join(sorted(VALID_KINDS))}")
+    return kind
 
 
 def _decode_entity(row: dict) -> dict:
@@ -195,10 +224,10 @@ def create_entity(
     images: Optional[list[str]] = None,
     commit: bool = True,
 ) -> dict:
-    if kind not in VALID_KINDS:
-        raise ValueError(f"unknown entity kind: {kind!r}")
+    validate_kind(kind)
     if not name or not name.strip():
         raise ValueError("entity name is required")
+    status = normalize_status(status)
     entity_id = db.new_id("e_")
     seq = _next_seq(conn, "entities", world_id)
     ts = db.now()
@@ -279,12 +308,29 @@ def upsert_entity(
     name: str,
     **fields_kw: Any,
 ) -> dict:
-    """Create the entity, or update it in place if the name/alias already exists."""
+    """Create the entity, or update it in place if the name/alias already exists.
+
+    On update only the values actually passed (not None) change, and
+    `fields` is merged into the existing fields instead of replacing them,
+    so "add a trait" never wipes the summary, the secrets or the stats, and
+    never silently resurrects a dead character. The name an alias matched
+    is kept (the caller may have used the alias). A different `kind` for
+    an existing name is refused rather than silently converting it.
+    """
+    validate_kind(kind)
+    patch = {k: v for k, v in fields_kw.items() if v is not None}
     try:
-        existing_id = resolve_entity_id(conn, world_id, name)
-        return update_entity(conn, world_id, existing_id, kind=kind, name=name, **fields_kw)
+        existing = get_entity(conn, world_id, name)
     except NotFound:
-        return create_entity(conn, world_id, kind, name, **fields_kw)
+        return create_entity(conn, world_id, kind, name, **patch)
+    if existing["kind"] != kind:
+        raise ValueError(
+            f"{existing['name']!r} already exists as a {existing['kind']} ({existing['ref']}); "
+            f"pass kind={existing['kind']!r} to update it, or choose a different name"
+        )
+    if "fields" in patch:
+        patch["fields_patch"] = patch.pop("fields")
+    return update_entity(conn, world_id, existing["id"], **patch)
 
 
 def update_entity(conn: sqlite3.Connection, world_id: str, ref: str, commit: bool = True, **patch: Any) -> dict:
@@ -296,6 +342,12 @@ def update_entity(conn: sqlite3.Connection, world_id: str, ref: str, commit: boo
     for key, value in patch.items():
         if value is None:
             continue
+        if key == "kind":
+            validate_kind(value)
+        elif key == "status":
+            value = normalize_status(value)
+        elif key == "name" and not str(value).strip():
+            raise ValueError("entity name cannot be empty")
         if key in allowed_json:
             sets.append(f"{allowed_json[key]} = ?")
             values.append(db.dumps(value))

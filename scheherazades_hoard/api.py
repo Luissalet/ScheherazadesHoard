@@ -80,15 +80,17 @@ class EntityGetBody(BaseModel):
 
 
 class EntityUpsertBody(BaseModel):
+    # Everything but world/kind/name is None by default on purpose: an
+    # update must only touch what the caller actually sent.
     world: str
     kind: str
     name: str
     aliases: Optional[list[str]] = None
-    summary: str = ""
-    description: str = ""
+    summary: Optional[str] = None
+    description: Optional[str] = None
     fields: Optional[dict] = None
-    secrets: str = ""
-    status: str = "alive"
+    secrets: Optional[str] = None
+    status: Optional[str] = None
     tags: Optional[list[str]] = None
     parent_id: Optional[str] = None
 
