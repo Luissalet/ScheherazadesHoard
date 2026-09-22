@@ -73,6 +73,7 @@ export function WorldsPage({
           </div>
         )}
       </div>
+      {!creating && error && <div style={{ marginBottom: 12 }}><ErrorBanner message={error} /></div>}
 
       {creating && (
         <div className="card" style={{ marginBottom: 16, maxWidth: 480 }}>
