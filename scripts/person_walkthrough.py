@@ -98,6 +98,45 @@ def run(w: Walk, mock_llm: str | None) -> None:
         w.nav("Sesiones"); w.shot("07-empty-sessions")
     w.step("empty world tour", empty_world_tour)
 
+    # UC1 - first characters and places by hand, then a scene with no model
+    def first_entities():
+        w.nav("Biblia")
+        for kind, name in (("Personaje", "Iria Castro"), ("Lugar", "Hospicio de San Telmo"),
+                           ("Lugar", "Muelle Viejo"), ("Personaje", "El Farolero")):
+            p.locator(".bible-layout .icon-button").first.click()
+            p.locator(".bible-layout .card input").first.fill(name)
+            p.locator(".bible-layout .card select").first.select_option(label=kind)
+            p.get_by_role("button", name="Crear").click()
+            p.wait_for_load_state("networkidle")
+            time.sleep(0.3)
+        w.shot("08-first-entities")
+    w.step("UC1 first entities", first_entities)
+
+    def first_scene():
+        w.nav("Jugar")
+        w.shot("08b-play-no-scene")
+        p.get_by_role("button", name="Cambiar escena").click()
+        p.locator(".scene-editor select").select_option(label="Hospicio de San Telmo")
+        p.locator(".scene-cast-item", has_text="Iria Castro").locator("input").check()
+        p.locator(".scene-editor input[aria-label='Ambiente']").fill("inquietante")
+        w.shot("09-scene-editor")
+        p.get_by_role("button", name="Aplicar escena").click()
+        p.wait_for_load_state("networkidle")
+        time.sleep(0.4)
+        p.locator(".mode-tab", has_text="Narración").click()
+        p.locator(".play-input-box textarea").fill("La lluvia golpea los cristales del hospicio. Alguien ha dejado un farol negro en la escalera.")
+        p.get_by_role("button", name="Enviar").click()
+        time.sleep(0.4)
+        p.locator(".mode-tab", has_text="Acción").click()
+        p.locator(".play-input-box textarea").fill("Iria recoge el farol.")
+        p.get_by_role("button", name="Enviar").click()
+        time.sleep(0.4)
+        p.locator(".side-panel .btn", has_text="2d6").first.click()
+        p.wait_for_load_state("networkidle")
+        time.sleep(0.5)
+        w.shot("09b-first-scene-played")
+    w.step("UC1 first scene", first_scene)
+
     # UC7 - the long world, every screen
     w.step("open Velamar", lambda: (open_velamar(w), w.shot("10-play-velamar")))
 
@@ -138,6 +177,27 @@ def run(w: Walk, mock_llm: str | None) -> None:
         w.shot("17-bible-mateo", full=True)
     w.step("bible", bible)
 
+    # UC8 - fix by hand what the model got wrong
+    def bible_edit():
+        p.locator(".entity-list-item", has_text="Mateo Lür").first.click()
+        time.sleep(0.4)
+        p.get_by_role("button", name="Editar").click()
+        summary = p.locator(".entity-edit textarea").first
+        summary.fill("Farolero retirado, sesenta años, manos quemadas. Murió en el Faro Viejo.")
+        w.shot("17b-bible-edit-form")
+        p.get_by_role("button", name="Guardar").click()
+        p.wait_for_load_state("networkidle")
+        time.sleep(0.4)
+        p.locator(".entity-list-item", has_text="Tobías").first.click()
+        time.sleep(0.4)
+        p.get_by_role("button", name="Editar").click()
+        p.locator(".entity-edit select").select_option(label="desaparecido")
+        p.get_by_role("button", name="Guardar").click()
+        p.wait_for_load_state("networkidle")
+        time.sleep(0.4)
+        w.shot("17c-bible-marked-missing")
+    w.step("UC8 bible edit", bible_edit)
+
     for label, name in (("Mapa de relaciones", "18-map"), ("Cronología", "19-timeline"), ("Hilos y relojes", "20-threads"),
                         ("Tablas", "21-tables"), ("Sesiones", "22-sessions"), ("Registro de dados", "23-dice"),
                         ("Actividad del asistente", "24-activity"), ("Backends", "25-backends"), ("Ajustes", "26-settings")):
@@ -147,7 +207,7 @@ def run(w: Walk, mock_llm: str | None) -> None:
     def export_chapter():
         w.nav("Sesiones")
         with p.expect_download(timeout=10000) as dl:
-            p.locator("table.simple tbody tr").first.locator("button").first.click()
+            p.locator("table.simple tbody tr").first.locator("button", has_text="Exportar capítulo").click()
         d = dl.value
         target = w.out / f"ui-{d.suggested_filename}"
         d.save_as(str(target))
