@@ -1,6 +1,6 @@
 # MCP tools
 
-Scheherazade's Hoard exposes 14 tools over the Model Context Protocol
+Scheherazade's Hoard exposes 16 tools over the Model Context Protocol
 (stdio transport), implemented in `scheherazades_hoard/mcp_server.py`. Each
 tool is a thin wrapper over `POST /api/agent/<tool>` on the running app,
 so the logic is the same one tested with `TestClient` in `tests/`; the
@@ -73,6 +73,8 @@ exact name.
 | `world_check(world, statement)` | yes | yes | `{consistent, conflicts: [{fact_id, text, why}], checked, rules_checked, llm_judge}` |
 | `session_export(world, session=None, format="md", offset=0, max_chars=6000)` | yes | yes | `{format, kind, text, offset, total_chars, truncated, next_offset}` |
 | `story_undo(world)` | no | no | `{undone_turn_id, turn_index, role, text, scene}` |
+| `session_start(world, title="")` | no | no | the new session `{id, title, started_at, ...}`, now current; an empty title gets a localized default ("Sesión 2") |
+| `session_rename(world, session, title)` | no | yes | the renamed session, same shape |
 
 No tool is destructive in the MCP sense (`destructiveHint: false`):
 `story_undo` only reverts what the last turn itself did. None reaches

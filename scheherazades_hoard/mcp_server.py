@@ -280,11 +280,40 @@ async def world_check(world: str, statement: str) -> dict:
     return await _call("world_check", {"world": world, "statement": statement})
 
 
+@mcp.tool(annotations=_ann(read_only=False, idempotent=False))
+async def session_start(world: str, title: str = "") -> dict:
+    """Start session / empezar partida, iniciar sesión nueva.
+
+    Starts a new session and makes it the world's current one, so the
+    next story_append and turn land there instead of piling onto
+    whatever session was current before — without this, everything ends
+    up in "Session 1" forever and "last night's chapter" means the whole
+    campaign. An empty `title` gets a default numbered in the world's
+    own language ("Sesión 2"); pass a real title to name it, e.g. "La
+    noche del faro". Returns the new session.
+
+    Keywords: start session, new session, name the session, empezar sesión, nueva sesión, nombrar sesión, nueva partida
+    """
+    return await _call("session_start", {"world": world, "title": title})
+
+
+@mcp.tool(annotations=_ann(read_only=False, idempotent=True))
+async def session_rename(world: str, session: str, title: str) -> dict:
+    """Rename session / cambiar el nombre de la sesión, renombrar partida.
+
+    By id or its current title (e.g. "Session 1"), to something you can
+    refer to later ("La noche del faro"). Returns the renamed session.
+
+    Keywords: rename session, name session, retitle session, renombrar sesión, nombrar sesión, cambiar nombre de la sesión, cambiar el título de la sesión
+    """
+    return await _call("session_rename", {"world": world, "session": session, "title": title})
+
+
 @mcp.tool(annotations=_ann(read_only=True, idempotent=True))
 async def session_export(
     world: str, session: Optional[str] = None, format: str = "md", offset: int = 0, max_chars: int = 6000,
 ) -> dict:
-    """Export / exportar capítulo, biblia del mundo, copia de seguridad.
+    """Export / exportar capítulo de la sesión, biblia, copia de seguridad.
 
     As text, a page at a time: a session as a Markdown chapter
     (pass `session` id or title), the world bible in Markdown (omit

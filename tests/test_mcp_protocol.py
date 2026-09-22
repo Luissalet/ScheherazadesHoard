@@ -72,7 +72,7 @@ def _text(result) -> str:
     return result.content[0].text
 
 
-async def test_list_tools_exposes_all_fourteen(live_app_url):
+async def test_list_tools_exposes_all_sixteen(live_app_url):
     async with stdio_client(_params(live_app_url)) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
@@ -82,6 +82,7 @@ async def test_list_tools_exposes_all_fourteen(live_app_url):
                 "story_worlds", "story_world_create", "world_context", "world_search",
                 "entity_get", "entity_upsert", "story_append", "dice_roll", "table_roll",
                 "thread_update", "clock_tick", "world_check", "session_export", "story_undo",
+                "session_start", "session_rename",
             }
             # every tool has annotations set, and read-only ones are honest about it
             by_name = {t.name: t for t in tools}
@@ -145,6 +146,19 @@ async def test_full_loop_over_mcp_stdio(live_app_url):
 
             undone = await session.call_tool("story_undo", {"world": world_id})
             assert undone.isError is False
+
+            started = await session.call_tool(
+                "session_start", {"world": world_id, "title": "La noche del faro"},
+            )
+            assert started.isError is False
+            new_session = json.loads(_text(started))
+            assert new_session["title"] == "La noche del faro"
+
+            renamed = await session.call_tool(
+                "session_rename", {"world": world_id, "session": new_session["id"], "title": "Segunda noche"},
+            )
+            assert renamed.isError is False
+            assert json.loads(_text(renamed))["title"] == "Segunda noche"
 
 
 async def test_error_surfaces_as_tool_error(live_app_url):

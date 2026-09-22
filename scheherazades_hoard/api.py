@@ -223,6 +223,25 @@ class ChapterBody(BaseModel):
     polish: bool = False
 
 
+class SessionCreateBody(BaseModel):
+    title: str = ""
+
+
+class SessionRenameBody(BaseModel):
+    title: str
+
+
+class SessionStartAgentBody(BaseModel):
+    world: str
+    title: str = ""
+
+
+class SessionRenameAgentBody(BaseModel):
+    world: str
+    session: str
+    title: str
+
+
 class TimelineCreateBody(BaseModel):
     in_world_date: str = ""
     summary: str
@@ -600,6 +619,26 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
             wid = store.resolve_world_id(C(), world)
             return store.list_sessions(C(), wid)
 
+    @app.post("/api/worlds/{world}/sessions")
+    async def start_session_ep(world: str, body: SessionCreateBody):
+        """Start a new session and make it the world's current one, so the
+        next turn (and "last night's chapter") is unambiguous. An empty
+        title gets the usual localized default ("Sesión 2")."""
+        with _db_lock:
+            wid = store.resolve_world_id(C(), world)
+            return store.start_session(C(), wid, title=body.title)
+
+    @app.patch("/api/worlds/{world}/sessions/{session}")
+    async def rename_session_ep(world: str, session: str, body: SessionRenameBody):
+        with _db_lock:
+            try:
+                wid = store.resolve_world_id(C(), world)
+                return store.rename_session(C(), wid, session, body.title)
+            except store.NotFound as e:
+                raise HTTPException(404, {"error": "not_found", "message": str(e)})
+            except ValueError as e:
+                raise HTTPException(400, {"error": "bad_request", "message": str(e)})
+
     @app.get("/api/worlds/{world}/sessions/{session}/turns")
     async def list_turns_ep(world: str, session: str):
         with _db_lock:
@@ -809,6 +848,21 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
             return result.text
 
         return await consistency.world_check(C(), wid, body.statement, chat_fn=chat_fn)
+
+    @app.post("/api/agent/session_start")
+    @agent_call("session_start")
+    async def a_session_start(body: SessionStartAgentBody):
+        """Start a new session and make it current, so an agent can put a
+        clean line between tonight's play and last night's — without this,
+        every turn lands in "Session 1" forever."""
+        wid = store.resolve_world_id(C(), body.world)
+        return store.start_session(C(), wid, title=body.title)
+
+    @app.post("/api/agent/session_rename")
+    @agent_call("session_rename")
+    async def a_session_rename(body: SessionRenameAgentBody):
+        wid = store.resolve_world_id(C(), body.world)
+        return store.rename_session(C(), wid, body.session, body.title)
 
     @app.post("/api/agent/session_export")
     @agent_call("session_export")

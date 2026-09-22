@@ -514,3 +514,37 @@ def test_chapter_plain_and_polished(world, client):
         200, json={"choices": [{"message": {"content": "La niebla subía, lenta."}}]}))
     r = client.post(url, json={"polish": True}).json()
     assert r == {"text": "La niebla subía, lenta.\n", "polished": True, "reason": "polished by m"}
+
+
+# --- usability report #6: starting and naming a session ---------------------
+
+def test_start_session_from_the_ui_route(world, client):
+    r = client.post(f"/api/worlds/{world['id']}/sessions", json={})
+    assert r.status_code == 200
+    assert r.json()["title"] == "Sesión 1"
+    r2 = client.post(f"/api/worlds/{world['id']}/sessions", json={"title": "La noche del faro"})
+    assert r2.json()["title"] == "La noche del faro"
+    sessions = client.get(f"/api/worlds/{world['id']}/sessions").json()
+    assert {s["title"] for s in sessions} == {"Sesión 1", "La noche del faro"}
+
+
+def test_rename_session_from_the_ui_route(world, client):
+    session = client.get(f"/api/worlds/{world['id']}/sessions").json()
+    # No session exists yet until one is created or a turn is appended.
+    client.post("/api/agent/story_append", json={"world": world["id"], "text": "x"})
+    session = client.get(f"/api/worlds/{world['id']}/sessions").json()[0]
+    r = client.patch(f"/api/worlds/{world['id']}/sessions/{session['id']}", json={"title": "Anoche"})
+    assert r.status_code == 200 and r.json()["title"] == "Anoche"
+    r_blank = client.patch(f"/api/worlds/{world['id']}/sessions/{session['id']}", json={"title": "  "})
+    assert r_blank.status_code == 400
+
+
+def test_agent_session_start_and_rename(world, client):
+    r = client.post("/api/agent/session_start", json={"world": world["id"], "title": "La noche del faro"})
+    assert r.status_code == 200 and r.json()["title"] == "La noche del faro"
+    r2 = client.post("/api/agent/session_start", json={"world": world["id"]})
+    assert r2.status_code == 200 and r2.json()["title"] == "Sesión 2"
+    r3 = client.post("/api/agent/session_rename", json={
+        "world": world["id"], "session": r2.json()["id"], "title": "Segunda noche",
+    })
+    assert r3.status_code == 200 and r3.json()["title"] == "Segunda noche"
