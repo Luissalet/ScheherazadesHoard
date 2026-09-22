@@ -782,17 +782,39 @@ def list_tables(conn: sqlite3.Connection, world_id: str) -> list[dict]:
 # Sessions & turns
 # ---------------------------------------------------------------------------
 
+_SESSION_LABEL = {"es": "Sesión"}  # anything else falls back to English
+
+
 def start_session(conn: sqlite3.Connection, world_id: str, title: str = "") -> dict:
+    """Start a new session and make it the world's current one. An empty
+    `title` gets a default numbered in the world's own language (a
+    Spanish world gets "Sesión 2", not "Session 2") — pass a real title
+    (from the UI or an agent) to name it instead."""
     session_id = db.new_id("s_")
     ts = db.now()
+    title = (title or "").strip()
     if not title:
         n = conn.execute("SELECT COUNT(*) AS n FROM sessions WHERE world_id = ?", (world_id,)).fetchone()["n"]
-        title = f"Session {n + 1}"
+        lang_row = conn.execute("SELECT language FROM worlds WHERE id = ?", (world_id,)).fetchone()
+        label = _SESSION_LABEL.get(lang_row["language"] if lang_row else "es", "Session")
+        title = f"{label} {n + 1}"
     conn.execute(
         "INSERT INTO sessions (id, world_id, title, started_at, ended_at) VALUES (?,?,?,?,NULL)",
         (session_id, world_id, title, ts),
     )
     conn.execute("UPDATE worlds SET current_session_id = ?, updated_at = ? WHERE id = ?", (session_id, ts, world_id))
+    conn.commit()
+    return dict(conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone())
+
+
+def rename_session(conn: sqlite3.Connection, world_id: str, session_ref: str, title: str) -> dict:
+    """Rename a session (by id or its current title). A blank title is
+    rejected — a session must always have something to call it by."""
+    title = (title or "").strip()
+    if not title:
+        raise ValueError("title must not be empty")
+    session_id = resolve_session_id(conn, world_id, session_ref)
+    conn.execute("UPDATE sessions SET title = ? WHERE id = ?", (title, session_id))
     conn.commit()
     return dict(conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone())
 

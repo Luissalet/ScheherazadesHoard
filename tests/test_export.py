@@ -39,6 +39,50 @@ def test_session_markdown_excludes_undone_turns(conn, world):
     assert "invisible-after-undo" not in md
 
 
+# --- usability report #5: the chapter must be manuscript-clean -------------
+
+def test_chapter_drops_ooc_and_roll_lines(conn, world):
+    sess = store.get_or_create_current_session(conn, world["id"])
+    store.append_turn(conn, world["id"], sess["id"], "narration", "narrator", text="La niebla cubre el puerto.")
+    store.append_turn(conn, world["id"], sess["id"], "ooc", "user", text="¿hacemos una pausa?")
+    store.append_turn(
+        conn, world["id"], sess["id"], "roll", "agent", text="tirada de sigilo",
+        rolls=[{"expression": "2d6+1", "total": 9, "band": "strong_hit"}],
+    )
+    md = export.session_to_markdown(conn, world["id"])
+    assert "niebla" in md
+    assert "pausa" not in md and "OOC" not in md
+    assert "strong_hit" not in md and "2d6" not in md and "sigilo" not in md
+
+
+def test_chapter_renders_actions_in_italics_not_as_a_blockquote(conn, world):
+    sess = store.get_or_create_current_session(conn, world["id"])
+    store.append_turn(conn, world["id"], sess["id"], "action", "user", text="Iria abre la puerta.")
+    md = export.session_to_markdown(conn, world["id"])
+    assert "*Iria abre la puerta.*" in md
+    assert "> Iria" not in md
+
+
+def test_chapter_leaves_raya_dialogue_untouched(conn, world):
+    sess = store.get_or_create_current_session(conn, world["id"])
+    store.append_turn(conn, world["id"], sess["id"], "dialogue", "narrator", text="—Vamos —dijo Iria.")
+    md = export.session_to_markdown(conn, world["id"])
+    assert "—Vamos —dijo Iria." in md
+    assert "“—Vamos" not in md
+
+
+def test_chapter_still_quotes_plain_dialogue(conn, world):
+    sess = store.get_or_create_current_session(conn, world["id"])
+    store.append_turn(conn, world["id"], sess["id"], "dialogue", "narrator", text="Vamos ya.")
+    md = export.session_to_markdown(conn, world["id"])
+    assert "“Vamos ya.”" in md
+
+
+def test_chapter_title_is_the_sessions_own_localized_default(conn, world):
+    md = export.session_to_markdown(conn, world["id"])
+    assert md.startswith("# Sesión 1")
+
+
 def test_bible_has_one_section_per_kind(conn, world):
     store.create_entity(conn, world["id"], "character", "Marisol")
     store.create_entity(conn, world["id"], "location", "Puerto Salado")

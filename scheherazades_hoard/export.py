@@ -6,13 +6,10 @@ JSON export/import that round-trips a world exactly.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Awaitable, Callable, Optional
 
 from . import db, store
-
-_ROLE_LABEL = {
-    "narration": "", "action": "> ", "dialogue": "", "ooc": "*(OOC)* ", "roll": "\U0001f3b2 ", "system": "_",
-}
 
 _POLISH_PROMPT = """Rewrite the following scene transcript as flowing prose for a reader.
 Keep every fact, name, number and event exactly as given — do not invent or
@@ -31,7 +28,14 @@ def polish_prompt(chapter_markdown: str) -> str:
     return _POLISH_PROMPT.format(text=chapter_markdown)
 
 
+_RAYA_DIALOGUE_RE = re.compile(r"^[—–-]\s?\S")
+
+
 def session_to_markdown(conn, world_id: str, session_ref: Optional[str] = None) -> str:
+    """A manuscript-clean chapter: only story prose and dialogue. Rolls
+    and out-of-character asides are game mechanics, not narration, so
+    they never make it into the text a writer would paste into a
+    manuscript tool — same as an undone turn."""
     world = store.get_world(conn, world_id)
     session_id = store.resolve_session_id(conn, world_id, session_ref)
     session = next(s for s in store.list_sessions(conn, world_id) if s["id"] == session_id)
@@ -40,17 +44,15 @@ def session_to_markdown(conn, world_id: str, session_ref: Optional[str] = None) 
     lines = [f"# {session['title']}", "", f"*{world['name']}*", ""]
     for t in turns:
         text = t["text"].strip()
-        if not text:
+        if not text or t["role"] in ("roll", "ooc", "system"):
             continue
-        if t["role"] == "roll":
-            rolls = ", ".join(f"{r.get('expression', '')} = {r.get('total', '')}" for r in t.get("rolls") or [])
-            lines.append(f"\U0001f3b2 *{text}* ({rolls})" if rolls else f"\U0001f3b2 *{text}*")
-        elif t["role"] == "dialogue":
-            lines.append(f"“{text}”")
+        if t["role"] == "dialogue":
+            # Spanish-style raya dialogue ("—Vamos —dijo Iria.") already
+            # carries its own punctuation; wrapping it in English curly
+            # quotes on top would be wrong. Only plain dialogue gets them.
+            lines.append(text if _RAYA_DIALOGUE_RE.match(text) else f"“{text}”")
         elif t["role"] == "action":
-            lines.append(f"> {text}")
-        elif t["role"] == "ooc":
-            lines.append(f"*(OOC: {text})*")
+            lines.append(f"*{text}*")
         else:
             lines.append(text)
         lines.append("")

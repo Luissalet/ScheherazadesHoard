@@ -124,6 +124,38 @@ def test_turn_rejects_bad_role(conn, world):
         store.append_turn(conn, world["id"], sess["id"], "bogus", "user")
 
 
+def test_new_session_default_title_is_localized(conn, world):
+    sess = store.start_session(conn, world["id"])
+    assert sess["title"] == "Sesión 1"
+    sess2 = store.start_session(conn, world["id"])
+    assert sess2["title"] == "Sesión 2"
+
+
+def test_new_session_default_title_in_english_world(conn):
+    w = store.create_world(conn, "Test", language="en")
+    sess = store.start_session(conn, w["id"])
+    assert sess["title"] == "Session 1"
+
+
+def test_start_session_accepts_an_explicit_title(conn, world):
+    sess = store.start_session(conn, world["id"], title="La noche del faro")
+    assert sess["title"] == "La noche del faro"
+    assert store.resolve_session_id(conn, world["id"], "la noche del faro") == sess["id"]
+
+
+def test_rename_session_updates_title_and_stays_findable_by_it(conn, world):
+    sess = store.get_or_create_current_session(conn, world["id"])
+    renamed = store.rename_session(conn, world["id"], sess["id"], "  Anoche en el puerto  ")
+    assert renamed["title"] == "Anoche en el puerto"
+    assert store.resolve_session_id(conn, world["id"], "anoche en el puerto") == sess["id"]
+
+
+def test_rename_session_rejects_a_blank_title(conn, world):
+    sess = store.get_or_create_current_session(conn, world["id"])
+    with pytest.raises(ValueError):
+        store.rename_session(conn, world["id"], sess["id"], "   ")
+
+
 def test_dice_log_roundtrip(conn):
     entry = store.log_dice(conn, "2d6+3", 10, [{"sides": 6, "value": 4}], seed=1, reason="ataque", who="agent")
     assert entry["result"] == 10
