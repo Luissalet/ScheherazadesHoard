@@ -2,9 +2,9 @@
 
 Eight concrete scenarios for Scheherazade's Hoard, written before walking
 the app as its first real user. They are grounded in one persona: a
-solo player and writer who writes fiction
-and builds worlds in Spanish, plays solo with a local model, and keeps a
-manuscript in a separate writing tool. Faustus is their AI
+solo player and writer who runs interactive fiction with a local
+language model, often building worlds in Spanish, and pastes finished
+sessions into a separate manuscript or writing tool. Faustus is their AI
 workspace; Prospero's Hoard is the sibling app that makes images.
 
 The walkthroughs that exercise them are `scripts/agent_walkthrough.py`
@@ -15,7 +15,7 @@ happened is in [USABILITY_REPORT.md](USABILITY_REPORT.md).
 
 ## UC1 - First evening: a world from nothing, in the interface
 
-- **Who:** the writer, on the first night after installing, no model
+- **Who:** the player, on the first night after installing, no model
   running yet.
 - **Goal:** create a world, its first characters and places, and play a
   first scene by hand.
@@ -32,7 +32,7 @@ happened is in [USABILITY_REPORT.md](USABILITY_REPORT.md).
 
 ## UC2 - A long solo session narrated by a local model through MCP
 
-- **Who:** the writer, playing in Spanish; Faustus narrates with a 27B
+- **Who:** the player, playing in Spanish; Faustus narrates with a 27B
   local model on llama.cpp and uses this app's tools.
 - **Goal:** a 40+ turn night of play in which continuity holds: who is
   dead, where everyone is, who knows what.
@@ -46,7 +46,7 @@ happened is in [USABILITY_REPORT.md](USABILITY_REPORT.md).
   facts about what Iria and Lucio learn, new threads, clock ticks. The
   model makes the mistakes a small model makes: it puts dead Mateo back
   in a scene, sends a role in Spanish (`narrador`), refers to people by
-  first name, and writes one turn the writer wants taken back
+  first name, and writes one turn the player wants taken back
   (`story_undo`).
 - **Done:** after 44 beats `world_context` puts the right people in the
   right place, the dead are refused in scenes and flagged by
@@ -56,7 +56,7 @@ happened is in [USABILITY_REPORT.md](USABILITY_REPORT.md).
 
 ## UC3 - Export a clean chapter for the manuscript
 
-- **Who:** the writer, the morning after UC2.
+- **Who:** the player, the morning after UC2.
 - **Goal:** a chapter they can paste into their manuscript tool without
   cleaning it by hand.
 - **Start:** the 44-beat session of UC2.
@@ -70,7 +70,7 @@ happened is in [USABILITY_REPORT.md](USABILITY_REPORT.md).
 
 ## UC4 - The app narrates on its own with a 27B model on llama.cpp
 
-- **Who:** the writer, without Faustus open, the model already loaded by
+- **Who:** the player, without Faustus open, the model already loaded by
   llama.cpp on the same PC.
 - **Goal:** press Narrar, read the proposed beat and the proposed
   changes, accept or untick them.
@@ -88,7 +88,7 @@ happened is in [USABILITY_REPORT.md](USABILITY_REPORT.md).
 
 ## UC5 - Continuity questions while writing outside the game
 
-- **Who:** the writer drafting a chapter in their manuscript tool, asking
+- **Who:** the player drafting a chapter in their manuscript tool, asking
   Faustus in Spanish.
 - **Goal:** answer continuity questions without opening the app.
 - **Prompts:** "Faustus, ¿quién ha muerto en Velamar?", "¿dónde vimos a
@@ -104,7 +104,7 @@ happened is in [USABILITY_REPORT.md](USABILITY_REPORT.md).
 
 ## UC6 - Illustrate the scene with Prospero's Hoard (combined)
 
-- **Who:** the writer, who wants a mood image for the chapter heading.
+- **Who:** the player, who wants a mood image for the chapter heading.
 - **Goal:** one image of the current scene without describing it again.
 - **Steps:** in Jugar, "Ilustrar escena" (visible only when Prospero's
   Hoard answers on 127.0.0.1:8815); or "Faustus, ilustra la escena
@@ -115,7 +115,7 @@ happened is in [USABILITY_REPORT.md](USABILITY_REPORT.md).
 
 ## UC7 - A world from notes, by an agent
 
-- **Who:** the writer, who has a page of character and place notes.
+- **Who:** the player, who has a page of character and place notes.
 - **Goal:** "Faustus, crea el mundo Velamar a partir de estas notas":
   entities with summaries, stats, secrets, nicknames (aliases), the
   relations between them, the opening threads and the clock.
@@ -129,7 +129,7 @@ happened is in [USABILITY_REPORT.md](USABILITY_REPORT.md).
 
 ## UC8 - The next evening: review and fix by hand
 
-- **Who:** the writer before the next session.
+- **Who:** the player before the next session.
 - **Goal:** fix what the model got wrong and see the shape of the story.
 - **Steps:** Biblia -> find "farol", open Mateo Lür, correct a summary,
   mark someone missing; Mapa de relaciones with 34 entities; Cronología;
