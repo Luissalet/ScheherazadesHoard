@@ -58,11 +58,13 @@ export function BiblePage({ world, lang }: { world: World; lang: Lang }) {
 
   const filtered = useMemo(() => {
     if (!entities) return [];
-    const q = search.trim().toLowerCase();
+    // accent- and case-insensitive, like the server's search ("corazon" finds "Corazón")
+    const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+    const q = fold(search.trim());
     return entities.filter((e) => {
       if (kindFilter !== "all" && e.kind !== kindFilter) return false;
       if (!q) return true;
-      return e.name.toLowerCase().includes(q) || e.summary.toLowerCase().includes(q) || e.aliases.some((a) => a.toLowerCase().includes(q));
+      return [e.name, e.summary, ...e.aliases, ...e.tags].some((text) => fold(text).includes(q));
     });
   }, [entities, search, kindFilter]);
 
