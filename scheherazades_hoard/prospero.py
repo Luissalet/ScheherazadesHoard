@@ -16,7 +16,7 @@ PROSPERO_URL = "http://127.0.0.1:8815"
 
 async def is_available(base_url: str = PROSPERO_URL, transport: Optional[httpx.BaseTransport] = None) -> bool:
     try:
-        async with httpx.AsyncClient(transport=transport, timeout=1.0) as client:
+        async with httpx.AsyncClient(transport=transport, trust_env=False, timeout=1.0) as client:
             r = await client.get(f"{base_url}/api/health")
     except httpx.HTTPError:
         return False
@@ -46,7 +46,7 @@ async def illustrate_scene(
     if not prompt:
         return None
     try:
-        async with httpx.AsyncClient(transport=transport, timeout=30.0) as client:
+        async with httpx.AsyncClient(transport=transport, trust_env=False, timeout=30.0) as client:
             r = await client.post(f"{base_url}/api/agent/studio_generate_image", json={"prompt": prompt})
     except httpx.HTTPError:
         return None

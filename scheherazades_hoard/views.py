@@ -22,6 +22,17 @@ def clip(text: Optional[str], n: int) -> str:
     return text if len(text) <= n else text[: n - 1].rstrip() + "…"
 
 
+def world_brief(w: dict) -> dict:
+    out = {
+        "id": w["id"], "name": w["name"], "genre": w["genre"], "tone": clip(w.get("tone"), 120),
+        "premise": clip(w.get("premise"), SUMMARY_CHARS), "ruleset": w["ruleset"], "language": w["language"],
+    }
+    if "counts" in w:
+        out["counts"] = w["counts"]
+        out["current_session"] = w.get("current_session")
+    return out
+
+
 def entity_brief(e: dict) -> dict:
     return {
         "id": e["id"], "ref": e["ref"], "kind": e["kind"], "name": e["name"],

@@ -75,7 +75,7 @@ def create_world(
     return get_world(conn, world_id)
 
 
-def resolve_world_id(conn: sqlite3.Connection, ref: str) -> str:
+def find_world_id(conn: sqlite3.Connection, ref: str) -> Optional[str]:
     row = conn.execute("SELECT id FROM worlds WHERE id = ?", (ref,)).fetchone()
     if row:
         return row["id"]
@@ -83,7 +83,16 @@ def resolve_world_id(conn: sqlite3.Connection, ref: str) -> str:
     for r in conn.execute("SELECT id, name FROM worlds"):
         if _norm(r["name"]) == norm:
             return r["id"]
-    raise NotFound(f"no world matches {ref!r}")
+    return None
+
+
+def resolve_world_id(conn: sqlite3.Connection, ref: str) -> str:
+    world_id = find_world_id(conn, ref)
+    if world_id is None:
+        names = [r["name"] for r in conn.execute("SELECT name FROM worlds ORDER BY updated_at DESC LIMIT 5")]
+        hint = f"; known worlds: {', '.join(names)}" if names else "; there are no worlds yet (story_world_create)"
+        raise NotFound(f"no world matches {ref!r}{hint}")
+    return world_id
 
 
 def _decode_world(row: dict) -> dict:

@@ -681,12 +681,16 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     @app.post("/api/agent/story_worlds")
     @agent_call("story_worlds")
     async def a_story_worlds(body: EmptyBody = EmptyBody()):
-        return store.list_worlds(C())
+        return [views.world_brief(w) for w in store.list_worlds(C())]
 
     @app.post("/api/agent/story_world_create")
     @agent_call("story_world_create")
     async def a_story_world_create(body: WorldCreate):
-        return store.create_world(C(), **body.model_dump())
+        if not body.name.strip():
+            raise ValueError("world name is required")
+        if store.find_world_id(C(), body.name):
+            raise ValueError(f"a world named {body.name!r} already exists; use it or pick another name")
+        return views.world_brief(store.create_world(C(), **body.model_dump()))
 
     @app.post("/api/agent/world_context")
     @agent_call("world_context")
@@ -773,13 +777,15 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     @agent_call("thread_update")
     async def a_thread_update(body: ThreadUpdateBody):
         wid = store.resolve_world_id(C(), body.world)
-        return store.update_thread(C(), wid, body.thread, body.status, body.note)
+        if body.status is None and not body.note:
+            raise ValueError("pass a status (open/advanced/resolved/abandoned), a note, or both")
+        return views.thread_brief(store.update_thread(C(), wid, body.thread, body.status, body.note))
 
     @app.post("/api/agent/clock_tick")
     @agent_call("clock_tick")
     async def a_clock_tick(body: ClockTickBody):
         wid = store.resolve_world_id(C(), body.world)
-        return store.tick_clock(C(), wid, body.clock, body.ticks)
+        return views.clock_brief(store.tick_clock(C(), wid, body.clock, body.ticks))
 
     @app.post("/api/agent/world_check")
     @agent_call("world_check")
@@ -822,15 +828,16 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     @agent_call("story_undo")
     async def a_story_undo(body: StoryUndoBody):
         wid = store.resolve_world_id(C(), body.world)
-        session = store.get_or_create_current_session(C(), wid)
-        last_turn = store.get_last_turn(C(), wid, session["id"])
+        session = store.get_current_session(C(), wid)
+        last_turn = store.get_last_turn(C(), wid, session["id"]) if session else None
         if not last_turn:
-            raise HTTPException(404, {"error": "not_found", "message": "no turn to undo"})
+            raise HTTPException(404, {"error": "not_found", "message": "no turn to undo in the current session"})
         delta_mod.undo_last(C(), wid, last_turn)
-        return {"undone_turn_id": last_turn["id"]}
-
-    # story_undo's body is a plain dict {"world": "..."}; give it a model too
-    # so FastAPI/TestClient JSON works the same as the other agent routes.
+        return {
+            "undone_turn_id": last_turn["id"], "turn_index": last_turn["idx"], "role": last_turn["role"],
+            "text": views.clip(last_turn["text"], 160),
+            "scene": views.scene_view(C(), wid, store.current_scene(C(), wid)),
+        }
 
     def _entity_detail(conn_, world_id: str, ref: str, include_secrets: bool) -> dict:
         """The Bible page's full view: every column (secrets only when

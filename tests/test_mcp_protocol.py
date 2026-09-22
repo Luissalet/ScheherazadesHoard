@@ -88,6 +88,16 @@ async def test_list_tools_exposes_all_fourteen(live_app_url):
             assert by_name["world_context"].annotations.readOnlyHint is True
             assert by_name["story_append"].annotations.readOnlyHint is False
             assert all(t.annotations.destructiveHint is False for t in tools)
+            assert all(t.annotations.openWorldHint is False for t in tools)
+            read_only = {n for n, t in by_name.items() if t.annotations.readOnlyHint}
+            assert read_only == {"story_worlds", "world_context", "world_search", "entity_get",
+                                 "world_check", "session_export"}
+            for t in tools:
+                # Faustus picks tools by retrieval over descriptions, in
+                # English and Spanish: every tool needs a Keywords line.
+                keywords = [ln for ln in t.description.splitlines() if ln.strip().startswith("Keywords:")]
+                assert keywords, t.name
+                assert len(keywords[0].split(",")) >= 6, t.name
 
 
 async def test_full_loop_over_mcp_stdio(live_app_url):
@@ -174,3 +184,20 @@ def test_refuses_non_loopback_url(monkeypatch):
         importlib.import_module("scheherazades_hoard.mcp_server")
     _sys.modules.pop("scheherazades_hoard.mcp_server", None)
     monkeypatch.setenv("SCHEHERAZADE_URL", "http://127.0.0.1:8816")
+
+
+async def test_secrets_and_compact_results_over_mcp(live_app_url):
+    async with stdio_client(_params(live_app_url)) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            world = json.loads(_text(await session.call_tool("story_world_create", {"name": "Mundo Secreto", "ruleset": "pbta_2d6"})))
+            await session.call_tool("entity_upsert", {
+                "world": world["id"], "kind": "character", "name": "Cato", "summary": "erudito del puerto",
+                "secrets": "robó el mapa",
+            })
+            hits = await session.call_tool("world_search", {"world": world["id"], "query": "puerto"})
+            assert "robó el mapa" not in _text(hits)
+            roll = json.loads(_text(await session.call_tool("dice_roll", {"expression": "2d6+1", "world": world["id"]})))
+            assert roll["band"] in ("miss", "weak_hit", "strong_hit")
+            bad = await session.call_tool("story_append", {"world": world["id"], "text": "x", "role": "narrator"})
+            assert bad.isError is True and "bad_request: unknown turn role" in _text(bad)
