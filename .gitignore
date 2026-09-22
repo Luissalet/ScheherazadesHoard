@@ -13,3 +13,4 @@ test-results/
 *.egg-info/
 build/
 *.tsbuildinfo
+data-uxtest/
