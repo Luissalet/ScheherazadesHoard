@@ -30,12 +30,35 @@ aplicación lo recuerda todo.
 | Dados | `NdM`, `+/-`, `kh/kl/dh/dl`, dados que explotan `!`, `adv(d20)`/`dis(d20)`, dados Fate `dF`; reproducibles con semilla; cada tirada queda en un registro de solo añadir; con un mundo, las tiradas de 2d6 traen su banda PbtA y las de d20 su valor natural y el crítico | Con topes a propósito (200 dados por tirada, 100 caracteres por expresión) |
 | Constructor de contexto | `world_context()`: premisa, límites de contenido, escena y reparto actuales, hechos ordenados por relevancia, hilos vivos, relojes a partir de la mitad y últimos turnos, cada línea con un id citable y dentro de un presupuesto de caracteres | El orden es léxico y por reglas, no una búsqueda por embeddings |
 | Motor de cambios (delta) | Validación elemento a elemento; después, el delta y su turno en una sola transacción de SQLite; la escena se mantiene de un turno a otro; deshacer retrocede turno a turno dentro de la sesión actual | No hay rehacer; los turnos de una sesión anterior no se pueden deshacer |
-| Narrador (modo autónomo) | Construye el prompt, llama al modelo compartido a través de Hoard Link, separa la narración del delta (JSON en bloque, objetos sueltos, reparación de comas finales) y te deja aceptar o rechazar cada cambio propuesto | Sin streaming: una respuesta, con indicador de carga |
+| Narrador (modo autónomo) | Construye el prompt, llama al modelo compartido a través de Hoard Link, separa la narración del delta (JSON en bloque o suelto; repara comillas tipográficas, comentarios, comas finales, un delta anidado bajo `"delta"` y una respuesta cortada por el límite de tokens, conservando los elementos completos), nunca deja JSON en la historia y te deja aceptar o rechazar cada cambio propuesto | Sin streaming: una respuesta, con indicador de carga |
 | Comprobación de coherencia | Reglas para un personaje muerto que actúa, un personaje situado lejos de donde se le vio por última vez y una relación contradicha (por palabra completa y con alias), más un juez por IA sobre los hechos que coinciden, obligado a citar sus ids; el resultado indica si el juez ha intervenido | Son heurísticas: se le escapan las contradicciones que ninguna regla cubre y ningún hecho recoge |
-| Exportación | Sesión como capítulo en Markdown, con pulido opcional por el modelo compartido (si no puede, devuelve el capítulo sin pulir y dice por qué), biblia del mundo en Markdown, exportación e importación completas en JSON | El pulido tiene instrucciones de no añadir hechos, pero no se contrasta con el original; los capítulos de más de 6000 caracteres no se pulen |
+| Exportación | Sesión como capítulo en Markdown listo para el manuscrito (sin ids, dados ni líneas fuera de personaje; acciones en cursiva; diálogo con raya), con pulido opcional por el modelo compartido (si no puede, devuelve el capítulo sin pulir y dice por qué), biblia del mundo en Markdown, exportación e importación completas en JSON | El pulido tiene instrucciones de no añadir hechos, pero no se contrasta con el original; los capítulos de más de 6000 caracteres no se pulen |
 | Ilustraciones | «Ilustrar» llama a la API de agente de Prospero's Hoard cuando responde en 127.0.0.1:8815; si no, el botón no aparece | Necesita esa otra aplicación; la imagen se muestra, pero no se guarda en el turno |
 | Backend de modelos compartido | Hoard Link incluido sin modificar (`scheherazades_hoard/hoard_link/`): primero la configuración explícita, luego el registro de modelos de Faustus y después los modelos ya cargados en local (llama.cpp, Ollama, servidores compatibles con OpenAI); Ajustes muestra el motivo, permite borrar la configuración manual y nunca devuelve el token | Solo se usa la capacidad de modelo de lenguaje; la aplicación nunca carga un modelo por su cuenta |
-| Interfaz | Jugar, Biblia, Mapa de relaciones (SVG), Cronología, Hilos y relojes (kanban y relojes segmentados), Tablas, Sesiones, Registro de dados, Backends, Actividad del asistente, Ajustes; comprobación de continuidad en Jugar; búsqueda sin tildes en la Biblia; en español e inglés, tema claro y oscuro | El mapa usa una disposición circular fija, no una simulación física |
+| Interfaz | Jugar (modos Narración/Acción/Diálogo/Fuera de personaje y un editor de escena para lugar, reparto y ambiente), Biblia (crear y editar: estado, resumen, apodos, etiquetas, secretos), Mapa de relaciones (SVG), Cronología, Hilos y relojes (kanban y relojes segmentados), Tablas, Sesiones (empezar, renombrar, exportar), Registro de dados, Backends, Actividad del asistente, Ajustes; comprobación de continuidad en Jugar; búsqueda sin tildes en la Biblia; en español e inglés, tema claro y oscuro | El mapa usa una disposición circular fija, no una simulación física |
+
+## Casos de uso
+
+Ocho escenarios de las noches de un escritor real, recorridos en el
+navegador y por MCP antes y después de la revisión de usabilidad
+([docs/USE_CASES.md](docs/USE_CASES.md), hallazgos en
+[docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md)):
+
+- **Primera noche sin modelo:** crear un mundo, su gente y sus lugares,
+  fijar la escena y jugarla a mano, con dados.
+- **Una noche larga narrada por un modelo local a través de Faustus:** 44
+  momentos en español en los que los muertos siguen muertos, cada cual
+  sigue donde se le vio por última vez y un turno malo se puede deshacer.
+- **Un capítulo limpio para el manuscrito:** la sesión exportada como
+  prosa y diálogo con raya, sin ids, dados ni líneas fuera de personaje.
+- **La aplicación narra sola:** el JSON descuidado de un modelo de 27B se
+  repara y cada cambio propuesto se revisa antes de tocar el mundo.
+- **Preguntas de continuidad mientras escribes:** «¿quién ha muerto?»,
+  «¿qué sabe Iria?», «¿es coherente que Mateo abra la puerta?», resueltas
+  en una o dos llamadas.
+- **La noche siguiente, arreglar a mano:** corregir un resumen, marcar a
+  alguien como desaparecido, avanzar un reloj, deshacer un turno, sin
+  modelo.
 
 ## Conectar con Faustus
 
@@ -63,6 +86,8 @@ carga dos veces.
 | `thread_update(world, thread, ...)` | no | Avanza, resuelve o abandona un hilo |
 | `clock_tick(world, clock, ticks=1)` | no | Avanza un reloj |
 | `world_check(world, statement)` | sí | Comprueba una afirmación contra los hechos establecidos |
+| `session_start(world, title="")` | no | Empieza una sesión nueva, con nombre si quieres |
+| `session_rename(world, session, title)` | no | Cambia el nombre de una sesión |
 | `session_export(world, ...)` | sí | Exporta un capítulo / la biblia / el JSON completo, por páginas |
 | `story_undo(world)` | no | Revierte el último turno y todo lo que cambió su delta |
 
@@ -120,20 +145,24 @@ detrás de todo ello: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 .venv\Scripts\python.exe -m pytest tests/ -q
 ```
 
-240 pruebas, sin red (ningún modelo real: Hoard Link, el narrador y el
-adaptador de Prospero se prueban contra `httpx.MockTransport`), en unos
-15 segundos. Cubren la gramática de dados y sus topes, la lectura según
+293 pruebas, sin red (ningún modelo real: Hoard Link, el narrador y el
+adaptador de Prospero se prueban contra `httpx.MockTransport`), en
+bastante menos de un minuto. Cubren la gramática de dados y sus topes, la lectura según
 el reglamento, el presupuesto, el orden y la exclusión de secretos del
 constructor de contexto, la validación del delta, el turno en una sola
 transacción y el deshacer (también con varias actualizaciones de lo mismo
-en un delta), la continuidad de la escena, la extracción de JSON, las
-reglas de coherencia, la búsqueda sin tildes, la exportación e
-importación, el servidor de archivos estáticos frente a recorridos de
+en un delta), la continuidad de la escena, la extracción de JSON
+(también el JSON descuidado que envía un modelo pequeño), la búsqueda de
+entidades por nombre de pila, las reglas de coherencia, la búsqueda sin
+tildes y por estado, el capítulo listo para el manuscrito, la exportación
+e importación, el servidor de archivos estáticos frente a recorridos de
 ruta, la protección de Host/Origin, el arranque por línea de comandos con
 su archivo de pid y su log, y una prueba del protocolo MCP que lanza el
 adaptador real por stdio contra una instancia en marcha (`list_tools`,
 anotaciones, líneas Keywords y un ciclo de crear, tirar, registrar,
-contexto y deshacer).
+contexto y deshacer), además de comprobar que un selector que solo lee
+la primera línea de cada herramienta encuentra la correcta para
+peticiones en español.
 
 `npm run build` (dentro de `frontend/`) ejecuta `tsc -b && vite build`
 con TypeScript en modo estricto y `noUnusedLocals` y `noUnusedParameters`

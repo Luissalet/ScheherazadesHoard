@@ -28,12 +28,34 @@ narrates while this app remembers everything.
 | Dice | `NdM`, `+/-`, `kh/kl/dh/dl`, exploding `!`, `adv(d20)`/`dis(d20)`, `dF`; seeded reproducibility; every roll in an append-only log; with a world, 2d6 rolls get their PbtA band and d20 rolls their natural value and crit | Bounded on purpose (200 dice per roll, 100 characters per expression) |
 | Context builder | `world_context()`: premise, content boundaries, current scene and cast, ranked facts, live threads, clocks at least half full and recent turns, each line with a citable id, within a character budget | Ranking is lexical and rule-based, not embedding search |
 | Delta engine | Validation per item, then the delta and its turn in one SQLite transaction; the scene carries over between turns; undo walks back turn by turn within the current session | No redo; turns of an earlier session cannot be undone |
-| Narrator (standalone) | Builds the prompt, calls the shared model through Hoard Link, separates narration from the delta (fenced JSON, bare objects, trailing-comma repair), and lets you accept or reject each proposed change | Not streamed: one reply, with a spinner |
+| Narrator (standalone) | Builds the prompt, calls the shared model through Hoard Link, separates narration from the delta (fenced or bare JSON; repairs typographic quotes, comments, trailing commas, a delta nested under `"delta"` and a reply cut at the token limit, keeping the complete items), never leaves JSON in the story, and lets you accept or reject each proposed change | Not streamed: one reply, with a spinner |
 | Consistency check | Rules for a dead character acting, a character placed away from where they were last seen and a contradicted relation (whole-word, alias-aware), plus an LLM judge over matching facts that must cite fact ids; the result says whether the judge ran | Heuristics: it misses contradictions that no rule covers and no fact states |
-| Export | Session as a Markdown chapter, optionally polished by the shared model (falls back to the plain chapter and says why), world bible in Markdown, full JSON export and import | Polish is instructed not to add facts but is not checked against the source; chapters over 6000 characters are not polished |
+| Export | Session as a manuscript-clean Markdown chapter (no ids, dice or out-of-character lines; actions in italics; Spanish raya dialogue), optionally polished by the shared model (falls back to the plain chapter and says why), world bible in Markdown, full JSON export and import | Polish is instructed not to add facts but is not checked against the source; chapters over 6000 characters are not polished |
 | Illustrations | "Illustrate" calls Prospero's Hoard's agent API when it answers on 127.0.0.1:8815; the button is hidden otherwise | Needs that separate app; the image is shown, not stored on the turn |
 | Shared model backend | Hoard Link vendored unmodified (`scheherazades_hoard/hoard_link/`): explicit settings, then Faustus's model registry, then resident models on loopback (llama.cpp, Ollama, OpenAI-compatible); Settings shows the reason, can clear overrides and never returns the token | Only the language-model capability is used; the app never loads a model itself |
-| UI | Play, Bible, Map of relations (SVG), Timeline, Threads & clocks (kanban and segmented clocks), Tables, Sessions, Dice log, Backends, Assistant activity, Settings; a continuity check box in Play; accent-insensitive Bible search; Spanish and English, light and dark | The map uses a fixed circular layout, not a physics simulation |
+| UI | Play (Narration/Action/Dialogue/Out-of-character modes and a scene editor for place, cast and mood), Bible (create and edit: status, summary, aliases, tags, secrets), Map of relations (SVG), Timeline, Threads & clocks (kanban and segmented clocks), Tables, Sessions (start, rename, export), Dice log, Backends, Assistant activity, Settings; a continuity check box in Play; accent-insensitive Bible search; Spanish and English, light and dark | The map uses a fixed circular layout, not a physics simulation |
+
+## Use cases
+
+Eight scenarios from a real writer's evenings, each walked in the browser
+and over MCP before and after the usability pass
+([docs/USE_CASES.md](docs/USE_CASES.md), findings in
+[docs/USABILITY_REPORT.md](docs/USABILITY_REPORT.md)):
+
+- **First evening without a model:** create a world, its people and
+  places, set the scene and play it by hand, dice included.
+- **A long night narrated by a local model through Faustus:** 44 beats
+  in Spanish where the dead stay dead, people stay where they were last
+  seen and a bad turn can be taken back.
+- **A clean chapter for the manuscript:** the session exported as prose
+  and raya dialogue, without ids, dice or out-of-character lines.
+- **The app narrates on its own:** a 27B model's sloppy JSON is repaired
+  and every proposed change is reviewed before it touches the world.
+- **Continuity questions while writing:** "who has died?", "what does
+  Iria know?", "is it consistent that Mateo opens the door?", answered in
+  one or two tool calls, asked in Spanish.
+- **The next evening, fixing by hand:** correct a summary, mark someone
+  missing, tick a clock, undo a turn — no model needed.
 
 ## Connect it to Faustus
 
@@ -60,6 +82,8 @@ found through Hoard Link, so nothing is loaded twice.
 | `thread_update(world, thread, ...)` | no | Advance/resolve/abandon a thread |
 | `clock_tick(world, clock, ticks=1)` | no | Advance a clock |
 | `world_check(world, statement)` | yes | Check a statement against established facts |
+| `session_start(world, title="")` | no | Start a new, optionally named session |
+| `session_rename(world, session, title)` | no | Rename a session |
 | `session_export(world, ...)` | yes | Export a chapter / the bible / full JSON, a page at a time |
 | `story_undo(world)` | no | Revert the last turn and everything its delta changed |
 
@@ -115,17 +139,22 @@ them: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 .venv\Scripts\python.exe -m pytest tests/ -q
 ```
 
-240 tests, offline (no real model: Hoard Link, the narrator and the
-Prospero adapter run against `httpx.MockTransport`), in about 15 seconds.
+293 tests, offline (no real model: Hoard Link, the narrator and the
+Prospero adapter run against `httpx.MockTransport`), in well under a
+minute.
 They cover the dice grammar and its bounds, ruleset readings, the context
 builder's budget, ranking and secret exclusion, delta validation, the
 single-transaction turn and undo (including repeated updates in one
-delta), scene carry-over, JSON extraction, the consistency rules,
-accent-insensitive search, exports and import, the static file server
+delta), scene carry-over, JSON extraction including the sloppy shapes a
+small model sends, first-name entity lookup, the consistency rules,
+accent-insensitive and status search, the manuscript-clean chapter,
+exports and import, the static file server
 against path traversal, the Host/Origin guard, the CLI start with its pid
 file and log, and an MCP protocol test that spawns the real adapter over
 stdio against a live instance (`list_tools`, annotations, Keywords lines,
-and a create, roll, append, context and undo round trip).
+and a create, roll, append, context and undo round trip), plus a check
+that a picker reading only line one of each tool description finds the
+right tool for Spanish requests.
 
 `npm run build` (inside `frontend/`) runs `tsc -b && vite build` with
 TypeScript strict mode, `noUnusedLocals` and `noUnusedParameters` on.
