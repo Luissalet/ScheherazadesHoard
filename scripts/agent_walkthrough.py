@@ -144,7 +144,7 @@ async def discovery(w: Walk) -> list:
         line1 = desc.strip().splitlines()[0] if desc.strip() else ""
         first_line_index[t.name] = line1[:INDEX_CHARS]
         full_index[t.name] = desc
-        has_es = bool(re.search(r"[áéíóúñ¿]|\b(tirar|crear|buscar|registrar|deshacer|exportar|comprobar)\b", fold(line1) + line1))
+        has_es = bool(re.search(r"[áéíóúñ¿]|\b(tirar|crear|buscar|registrar|deshacer|exportar|comprobar|actualizar|resolver|avanzar)\b", fold(line1) + line1))
         print(f"  {t.name:20s} line1={len(line1):3d} chars  es_trigger={'yes' if has_es else 'no '}  {line1[:70]!r}")
         w.check(f"{t.name}: first line <= 110 chars", len(line1) <= 110, f"{len(line1)}")
         w.check(f"{t.name}: first line has a Spanish trigger word", has_es)

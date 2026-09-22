@@ -79,3 +79,43 @@ def test_naive_spanish_picker_finds_the_right_tool_for_every_request():
         if picked != expected:
             misses.append((request, expected, picked))
     assert not misses, f"picker failed on: {misses}"
+
+
+# The walkthrough's own picker (scripts/agent_walkthrough.py): accents
+# folded, the tool name counts too, and a tie goes to the name that sorts
+# last. "qué mundos hay" once tied story_worlds with world_search and lost.
+WALKTHROUGH_INTENTS = [
+    ("tirar dados", "dice_roll"), ("tirada de 2d6", "dice_roll"), ("roll dice", "dice_roll"),
+    ("qué mundos hay", "story_worlds"), ("crear mundo nuevo", "story_world_create"),
+    ("contexto de la escena", "world_context"), ("qué está pasando", "world_context"),
+    ("buscar personaje", "world_search"), ("dónde está Nuño", "world_search"),
+    ("ficha de personaje", "entity_get"), ("crear personaje", "entity_upsert"),
+    ("registrar turno", "story_append"), ("guardar escena", "story_append"),
+    ("tabla aleatoria", "table_roll"), ("resolver trama", "thread_update"),
+    ("avanzar reloj", "clock_tick"), ("comprobar continuidad", "world_check"),
+    ("es coherente", "world_check"), ("exportar capítulo", "session_export"),
+    ("deshacer último turno", "story_undo"), ("undo", "story_undo"),
+]
+
+
+def _fold(text: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFKD", text.lower()) if not unicodedata.combining(c))
+
+
+def _folded_words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9_]+", _fold(text)) if len(w) > 2}
+
+
+def test_walkthrough_picker_finds_every_intent_from_line_one():
+    tools = asyncio.run(mcp_server.mcp.list_tools())
+    index = {t.name: _first_line_120(t.description or "") for t in tools}
+    misses = []
+    for intent, want in WALKTHROUGH_INTENTS:
+        iw = _folded_words(intent)
+        scored = sorted(((len(iw & _folded_words(name.replace("_", " ") + " " + text)), name)
+                         for name, text in index.items()), reverse=True)
+        got = scored[0][1] if scored and scored[0][0] > 0 else None
+        if got != want:
+            misses.append((intent, want, got))
+    assert not misses, misses

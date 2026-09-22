@@ -85,7 +85,7 @@ def _ann(read_only: bool, idempotent: bool) -> ToolAnnotations:
 
 @mcp.tool(annotations=_ann(read_only=True, idempotent=True))
 async def story_worlds() -> dict:
-    """List every world / mundo, campaña, historia — listar mundos, campañas.
+    """List worlds / qué mundos hay, listar mundos, campañas, historias.
 
     id, name, genre, ruleset, language, counts (entities, open threads,
     sessions) and the current session. Call this first to learn a world's
