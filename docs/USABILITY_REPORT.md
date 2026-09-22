@@ -33,7 +33,8 @@ next and each will be marked here when it lands.
 ## Findings
 
 Ranked by how much they hurt a real user. "Required" marks the issues
-confirmed from live tests on a real machine.
+confirmed from live tests on a real machine, not only in this pass's
+scripted walkthroughs.
 
 ### Blockers
 

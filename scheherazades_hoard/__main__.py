@@ -1,8 +1,8 @@
 """`python -m scheherazades_hoard` — start the app on 127.0.0.1.
 
-Flags: --port, --data-dir, --demo, --no-browser (matches the shared
-contract's launch shape so Faustus's `launch_hint` and the
-`Iniciar/Detener` scripts work unmodified).
+Flags: --port, --data-dir, --demo, --no-browser (matches the launch shape
+Faustus's `launch_hint` expects, so the `Iniciar/Detener` scripts work
+unmodified).
 """
 from __future__ import annotations
 

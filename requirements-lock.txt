@@ -1,8 +1,8 @@
 # Exact set to `pip install -r requirements-lock.txt` inside .venv.
 # Direct dependencies (pinned in pyproject.toml) plus their key transitive
 # pins, resolved on Linux + Python 3.11; all of these publish cp311/cp313
-# win_amd64 wheels too (pure-Python or already listed in the shared
-# contract's known-good set).
+# win_amd64 wheels too (pure-Python or already known-good on both
+# platforms).
 
 fastapi==0.115.6
 uvicorn==0.34.0

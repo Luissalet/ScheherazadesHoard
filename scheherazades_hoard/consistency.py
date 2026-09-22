@@ -82,7 +82,7 @@ _DEATH_CONTEXT = re.compile(
 )
 
 
-# Rule messages in the world's language (worlds are often played in Spanish).
+# Rule messages in the world's language (many worlds are played in Spanish).
 _MSG = {
     "en": {
         "dead_text": "{name} is {status}",

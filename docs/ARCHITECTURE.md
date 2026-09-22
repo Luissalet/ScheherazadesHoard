@@ -67,8 +67,8 @@ world's file.
 
 ## The shared model backend (Hoard Link)
 
-By design, this app never starts or loads a
-model. Hoard Link is vendored unmodified in `scheherazades_hoard/hoard_link/`
+By design, this app never starts or loads a model of its own. Hoard Link
+is vendored unmodified in `scheherazades_hoard/hoard_link/`
 and resolves the `llm` capability in this order: explicit configuration
 (`data/backend.json`, written by the Settings screen, and `HOARD_LLM_URL`
 / `HOARD_LLM_MODEL` / `HOARD_FAUSTUS_URL` / `HOARD_FAUSTUS_TOKEN`), then
