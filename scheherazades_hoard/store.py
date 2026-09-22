@@ -193,6 +193,7 @@ def create_entity(
     tags: Optional[list[str]] = None,
     parent_id: Optional[str] = None,
     images: Optional[list[str]] = None,
+    commit: bool = True,
 ) -> dict:
     if kind not in VALID_KINDS:
         raise ValueError(f"unknown entity kind: {kind!r}")
@@ -217,7 +218,8 @@ def create_entity(
         "SELECT * FROM entities WHERE id = ?", (entity_id,)
     ).fetchone()))
     _fts_upsert_entity(conn, e)
-    conn.commit()
+    if commit:
+        conn.commit()
     return e
 
 
@@ -285,7 +287,7 @@ def upsert_entity(
         return create_entity(conn, world_id, kind, name, **fields_kw)
 
 
-def update_entity(conn: sqlite3.Connection, world_id: str, ref: str, **patch: Any) -> dict:
+def update_entity(conn: sqlite3.Connection, world_id: str, ref: str, commit: bool = True, **patch: Any) -> dict:
     entity_id = resolve_entity_id(conn, world_id, ref)
     allowed_json = {"aliases": "aliases_json", "fields": "fields_json",
                     "tags": "tags_json", "images": "images_json"}
@@ -317,15 +319,18 @@ def update_entity(conn: sqlite3.Connection, world_id: str, ref: str, **patch: An
             "SELECT * FROM entities WHERE id = ?", (entity_id,)
         ).fetchone()))
         _fts_upsert_entity(conn, e)
-        conn.commit()
+        if commit:
+            conn.commit()
         return e
     return get_entity(conn, world_id, entity_id)
 
 
-def delete_entity(conn: sqlite3.Connection, entity_id: str) -> None:
+def delete_entity(conn: sqlite3.Connection, entity_id: str, commit: bool = True) -> None:
     conn.execute("DELETE FROM entities_fts WHERE id = ?", (entity_id,))
     conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
-    conn.commit()
+    delete_relations_for(conn, entity_id)
+    if commit:
+        conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +339,7 @@ def delete_entity(conn: sqlite3.Connection, entity_id: str) -> None:
 
 def create_relation(
     conn: sqlite3.Connection, world_id: str, a_id: str, b_id: str,
-    type: str, note: str = "", since: str = "",
+    type: str, note: str = "", since: str = "", commit: bool = True,
 ) -> dict:
     rel_id = db.new_id("r_")
     ts = db.now()
@@ -343,7 +348,8 @@ def create_relation(
         " VALUES (?,?,?,?,?,?,?,?)",
         (rel_id, world_id, a_id, b_id, type, note, since, ts),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return dict(conn.execute("SELECT * FROM relations WHERE id = ?", (rel_id,)).fetchone())
 
 
@@ -380,6 +386,7 @@ def create_fact(
     conn: sqlite3.Connection, world_id: str, text: str,
     session_id: Optional[str] = None, turn_id: Optional[str] = None,
     entity_ids: Optional[list[str]] = None, canon: bool = False,
+    commit: bool = True,
 ) -> dict:
     fact_id = db.new_id("f_")
     seq = _next_seq(conn, "facts", world_id)
@@ -393,7 +400,8 @@ def create_fact(
         "INSERT INTO facts_fts (id, world_id, text) VALUES (?,?,?)",
         (fact_id, world_id, text),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return _decode_fact(dict(conn.execute("SELECT * FROM facts WHERE id = ?", (fact_id,)).fetchone()))
 
 
@@ -456,7 +464,7 @@ def _fts_query(text: str) -> str:
 def create_timeline_event(
     conn: sqlite3.Connection, world_id: str, in_world_date: str, summary: str,
     entity_ids: Optional[list[str]] = None, session_id: Optional[str] = None,
-    turn_id: Optional[str] = None,
+    turn_id: Optional[str] = None, commit: bool = True,
 ) -> dict:
     ev_id = db.new_id("t_")
     ts = db.now()
@@ -465,7 +473,8 @@ def create_timeline_event(
         " VALUES (?,?,?,?,?,?,?,?)",
         (ev_id, world_id, in_world_date, summary, db.dumps(entity_ids or []), session_id, turn_id, ts),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     row = dict(conn.execute("SELECT * FROM timeline_events WHERE id = ?", (ev_id,)).fetchone())
     row["entity_ids"] = db.loads(row.pop("entity_ids_json"), [])
     return row
@@ -497,7 +506,10 @@ def _decode_thread(row: dict) -> dict:
     return row
 
 
-def create_thread(conn: sqlite3.Connection, world_id: str, title: str, status: str = "open", notes: str = "") -> dict:
+def create_thread(
+    conn: sqlite3.Connection, world_id: str, title: str, status: str = "open",
+    notes: str = "", commit: bool = True,
+) -> dict:
     if status not in VALID_THREAD_STATUS:
         raise ValueError(f"unknown thread status: {status!r}")
     thread_id = db.new_id("th_")
@@ -508,7 +520,8 @@ def create_thread(conn: sqlite3.Connection, world_id: str, title: str, status: s
         " VALUES (?,?,?,?,?,?,?,?)",
         (thread_id, world_id, seq, title, status, notes, ts, ts),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return _decode_thread(dict(conn.execute("SELECT * FROM threads WHERE id = ?", (thread_id,)).fetchone()))
 
 
@@ -546,7 +559,7 @@ def list_threads(conn: sqlite3.Connection, world_id: str, status: Optional[str] 
 
 def update_thread(
     conn: sqlite3.Connection, world_id: str, ref: str,
-    status: Optional[str] = None, note: Optional[str] = None,
+    status: Optional[str] = None, note: Optional[str] = None, commit: bool = True,
 ) -> dict:
     thread_id = resolve_thread_id(conn, world_id, ref)
     sets, values = [], []
@@ -565,7 +578,8 @@ def update_thread(
         values.append(db.now())
         values.append(thread_id)
         conn.execute(f"UPDATE threads SET {', '.join(sets)} WHERE id = ?", values)
-        conn.commit()
+        if commit:
+            conn.commit()
     return get_thread(conn, world_id, thread_id)
 
 
@@ -622,14 +636,15 @@ def get_clock(conn: sqlite3.Connection, world_id: str, ref: str) -> dict:
     return _decode_clock(dict(conn.execute("SELECT * FROM clocks WHERE id = ?", (clock_id,)).fetchone()))
 
 
-def tick_clock(conn: sqlite3.Connection, world_id: str, ref: str, ticks: int = 1) -> dict:
+def tick_clock(conn: sqlite3.Connection, world_id: str, ref: str, ticks: int = 1, commit: bool = True) -> dict:
     clock_id = resolve_clock_id(conn, world_id, ref)
     row = conn.execute("SELECT * FROM clocks WHERE id = ?", (clock_id,)).fetchone()
     new_filled = max(0, min(row["segments"], row["filled"] + ticks))
     conn.execute(
         "UPDATE clocks SET filled = ?, updated_at = ? WHERE id = ?", (new_filled, db.now(), clock_id)
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return get_clock(conn, world_id, clock_id)
 
 
@@ -743,7 +758,7 @@ def append_turn(
     conn: sqlite3.Connection, world_id: str, session_id: str, role: str, author: str,
     text: str = "", rolls: Optional[list] = None, scene: Optional[dict] = None,
     delta: Optional[dict] = None, applied: bool = False,
-    undo_snapshot: Optional[dict] = None,
+    undo_snapshot: Optional[dict] = None, commit: bool = True,
 ) -> dict:
     if role not in VALID_ROLES:
         raise ValueError(f"unknown turn role: {role!r}")
@@ -766,7 +781,8 @@ def append_turn(
             int(applied), db.dumps(undo_snapshot) if undo_snapshot is not None else None, ts,
         ),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return _decode_turn(dict(conn.execute("SELECT * FROM turns WHERE id = ?", (turn_id,)).fetchone()))
 
 
@@ -790,9 +806,10 @@ def get_last_turn(conn: sqlite3.Connection, world_id: str, session_id: str) -> O
     return _decode_turn(dict(row)) if row else None
 
 
-def mark_turn_undone(conn: sqlite3.Connection, turn_id: str) -> None:
+def mark_turn_undone(conn: sqlite3.Connection, turn_id: str, commit: bool = True) -> None:
     conn.execute("UPDATE turns SET undone = 1 WHERE id = ?", (turn_id,))
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def get_turn_raw(conn: sqlite3.Connection, turn_id: str) -> Optional[sqlite3.Row]:
@@ -880,3 +897,56 @@ def search_world(
         entity_hits = [e for e in entity_hits if e["kind"] in kinds]
     fact_hits = search_facts(conn, world_id, query, limit=limit)
     return {"entities": entity_hits[:limit], "facts": fact_hits[:limit]}
+
+
+# ---------------------------------------------------------------------------
+# Low-level delete/restore helpers used by the delta engine's undo path
+# ---------------------------------------------------------------------------
+
+def delete_relation(conn: sqlite3.Connection, relation_id: str, commit: bool = True) -> None:
+    conn.execute("DELETE FROM relations WHERE id = ?", (relation_id,))
+    if commit:
+        conn.commit()
+
+
+def delete_fact(conn: sqlite3.Connection, fact_id: str, commit: bool = True) -> None:
+    conn.execute("DELETE FROM facts_fts WHERE id = ?", (fact_id,))
+    conn.execute("DELETE FROM facts WHERE id = ?", (fact_id,))
+    if commit:
+        conn.commit()
+
+
+def delete_timeline_event(conn: sqlite3.Connection, event_id: str, commit: bool = True) -> None:
+    conn.execute("DELETE FROM timeline_events WHERE id = ?", (event_id,))
+    if commit:
+        conn.commit()
+
+
+def restore_clock_filled(conn: sqlite3.Connection, clock_id: str, filled: int, commit: bool = True) -> None:
+    conn.execute("UPDATE clocks SET filled = ? WHERE id = ?", (filled, clock_id))
+    if commit:
+        conn.commit()
+
+
+def restore_thread_fields(conn: sqlite3.Connection, thread_id: str, status: str, notes: str, commit: bool = True) -> None:
+    conn.execute("UPDATE threads SET status = ?, notes = ? WHERE id = ?", (status, notes, thread_id))
+    if commit:
+        conn.commit()
+
+
+def restore_entity_row(conn: sqlite3.Connection, entity_id: str, prev: dict, commit: bool = True) -> None:
+    """Restore an entity's mutable columns to a previously captured snapshot."""
+    conn.execute(
+        """UPDATE entities SET kind=?, name=?, aliases_json=?, summary=?, description=?,
+           fields_json=?, secrets=?, status=?, tags_json=?, parent_id=?, images_json=?, updated_at=?
+           WHERE id = ?""",
+        (
+            prev["kind"], prev["name"], db.dumps(prev["aliases"]), prev["summary"], prev["description"],
+            db.dumps(prev["fields"]), prev["secrets"], prev["status"], db.dumps(prev["tags"]),
+            prev["parent_id"], db.dumps(prev["images"]), db.now(), entity_id,
+        ),
+    )
+    e = _decode_entity(dict(conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()))
+    _fts_upsert_entity(conn, e)
+    if commit:
+        conn.commit()
