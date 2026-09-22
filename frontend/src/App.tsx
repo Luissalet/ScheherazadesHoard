@@ -31,7 +31,8 @@ function readTheme(): Theme {
   } catch {
     /* ignore */
   }
-  return "light";
+  // no explicit choice yet: follow the operating system
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 function readWorldId(): string | null {
@@ -53,12 +54,18 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  // Only an explicit choice is remembered; until then the theme keeps
+  // following prefers-color-scheme.
+  const chooseTheme = (next: Theme) => {
+    setTheme(next);
     try {
-      localStorage.setItem("scheherazade.theme", theme);
+      localStorage.setItem("scheherazade.theme", next);
     } catch {
       /* ignore */
     }
-  }, [theme]);
+  };
 
   useEffect(() => {
     try {
@@ -132,7 +139,7 @@ export default function App() {
           lang={lang}
           onToggleLang={toggleLang}
           theme={theme}
-          onSetTheme={setTheme}
+          onSetTheme={chooseTheme}
           onOpenMobile={() => setMobileOpen(true)}
         />
         <div className="content">
@@ -141,7 +148,7 @@ export default function App() {
           )}
           {section === "backends" && <BackendsPage lang={lang} />}
           {section === "activity" && <ActivityPage lang={lang} />}
-          {section === "settings" && <SettingsPage lang={lang} theme={theme} onSetTheme={setTheme} onSetLang={(l) => { setLang(l); persistLang(l); }} />}
+          {section === "settings" && <SettingsPage lang={lang} theme={theme} onSetTheme={chooseTheme} onSetLang={(l) => { setLang(l); persistLang(l); }} />}
 
           {currentWorld && section === "play" && <PlayPage world={currentWorld} lang={lang} onWorldChanged={reloadWorlds} />}
           {currentWorld && section === "bible" && <BiblePage world={currentWorld} lang={lang} />}

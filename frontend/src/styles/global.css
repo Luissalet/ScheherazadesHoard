@@ -731,3 +731,14 @@ label.btn {
   color: var(--text);
   margin-bottom: 0;
 }
+
+/* Narrow windows. Kept at the end on purpose: the base .sidebar rule above
+   comes after the first media block and would otherwise win. */
+@media (max-width: 760px) {
+  .sidebar { display: none; }
+  .sidebar.open { display: flex; position: fixed; inset: 0; z-index: 40; }
+}
+@media (max-width: 900px) {
+  .play-layout { height: auto; }
+  .transcript { overflow-y: visible; }
+}

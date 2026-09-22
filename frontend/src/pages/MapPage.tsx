@@ -61,12 +61,28 @@ export function MapPage({ world, lang }: { world: World; lang: Lang }) {
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+    // The container only exists once the data has loaded (before that the
+    // component renders "Loading"), so observe again when it appears.
+  }, [entities === null]);
 
   const positions = useMemo(
     () => layout(entities ?? [], size.width, size.height),
     [entities, size.width, size.height],
   );
+
+  // Several relations between the same two entities share one line with
+  // one label ("protege a · confía en") instead of drawing labels on top
+  // of each other.
+  const edges = useMemo(() => {
+    const groups = new Map<string, { a: string; b: string; types: string[] }>();
+    for (const rel of relations ?? []) {
+      const key = [rel.a_id, rel.b_id].sort().join("|");
+      const g = groups.get(key) ?? { a: rel.a_id, b: rel.b_id, types: [] };
+      if (!g.types.includes(rel.type)) g.types.push(rel.type);
+      groups.set(key, g);
+    }
+    return [...groups.entries()].map(([key, g]) => ({ key, ...g }));
+  }, [relations]);
 
   const byId = useMemo(() => {
     const m: Record<string, Entity> = {};
@@ -84,13 +100,13 @@ export function MapPage({ world, lang }: { world: World; lang: Lang }) {
     <div className="card" style={{ height: "100%", padding: 0, overflow: "hidden" }}>
       <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative" }}>
         <svg width={size.width} height={size.height} style={{ display: "block" }}>
-          {(relations ?? []).map((rel) => {
-            const a = positions[rel.a_id];
-            const b = positions[rel.b_id];
+          {edges.map((rel) => {
+            const a = positions[rel.a];
+            const b = positions[rel.b];
             if (!a || !b) return null;
-            const active = hovered === rel.a_id || hovered === rel.b_id;
+            const active = hovered === rel.a || hovered === rel.b;
             return (
-              <g key={rel.id}>
+              <g key={rel.key}>
                 <line
                   x1={a.x} y1={a.y} x2={b.x} y2={b.y}
                   stroke={active ? "var(--accent)" : "var(--border)"}
@@ -100,10 +116,13 @@ export function MapPage({ world, lang }: { world: World; lang: Lang }) {
                   x={(a.x + b.x) / 2}
                   y={(a.y + b.y) / 2}
                   fontSize={10}
-                  fill="var(--text-muted)"
+                  fill={active ? "var(--text)" : "var(--text-muted)"}
                   textAnchor="middle"
+                  paintOrder="stroke"
+                  stroke="var(--bg-elevated)"
+                  strokeWidth={3}
                 >
-                  {rel.type}
+                  {rel.types.join(" · ")}
                 </text>
               </g>
             );
