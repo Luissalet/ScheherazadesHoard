@@ -1,0 +1,141 @@
+export type Lang = "es" | "en";
+
+const dict = {
+  appName: { es: "El Tesoro de Scheherazade", en: "Scheherazade's Hoard" },
+  nav_worlds: { es: "Mundos", en: "Worlds" },
+  nav_play: { es: "Jugar", en: "Play" },
+  nav_bible: { es: "Biblia", en: "Bible" },
+  nav_map: { es: "Mapa de relaciones", en: "Map of relations" },
+  nav_timeline: { es: "Cronología", en: "Timeline" },
+  nav_threads: { es: "Hilos y relojes", en: "Threads & clocks" },
+  nav_tables: { es: "Tablas", en: "Tables" },
+  nav_sessions: { es: "Sesiones", en: "Sessions" },
+  nav_dice: { es: "Registro de dados", en: "Dice log" },
+  nav_backends: { es: "Backends", en: "Backends" },
+  nav_activity: { es: "Actividad del asistente", en: "Assistant activity" },
+  nav_settings: { es: "Ajustes", en: "Settings" },
+
+  worlds_title: { es: "Tus mundos", en: "Your worlds" },
+  worlds_empty: { es: "Aún no has creado ningún mundo. Crea el primero para empezar a narrar.", en: "You haven't created a world yet. Create your first one to start narrating." },
+  worlds_new: { es: "Nuevo mundo", en: "New world" },
+  worlds_open: { es: "Abrir", en: "Open" },
+  world_name: { es: "Nombre", en: "Name" },
+  world_genre: { es: "Género", en: "Genre" },
+  world_tone: { es: "Tono", en: "Tone" },
+  world_premise: { es: "Premisa", en: "Premise" },
+  world_ruleset: { es: "Sistema de reglas", en: "Ruleset" },
+  world_language: { es: "Idioma del mundo", en: "World language" },
+  create: { es: "Crear", en: "Create" },
+  cancel: { es: "Cancelar", en: "Cancel" },
+  save: { es: "Guardar", en: "Save" },
+
+  play_input_placeholder: { es: "¿Qué haces?", en: "What do you do?" },
+  play_mode_action: { es: "Acción", en: "Action" },
+  play_mode_dialogue: { es: "Diálogo", en: "Dialogue" },
+  play_mode_ooc: { es: "Fuera de personaje", en: "Out of character" },
+  play_send: { es: "Enviar", en: "Send" },
+  play_narrate: { es: "Narrar", en: "Narrate" },
+  play_narrating: { es: "Narrando…", en: "Narrating…" },
+  play_undo: { es: "Deshacer último turno", en: "Undo last turn" },
+  play_illustrate: { es: "Ilustrar escena", en: "Illustrate scene" },
+  play_gm_view: { es: "Vista de Guardián", en: "GM view" },
+  play_player_view: { es: "Vista de jugador", en: "Player view" },
+  play_scene: { es: "Escena", en: "Scene" },
+  play_location: { es: "Lugar", en: "Location" },
+  play_present: { es: "Presentes", en: "Present" },
+  play_mood: { es: "Ambiente", en: "Mood" },
+  play_proposed_delta: { es: "Cambios propuestos", en: "Proposed changes" },
+  play_accept: { es: "Aceptar", en: "Accept" },
+  play_reject: { es: "Rechazar", en: "Reject" },
+  play_dice_tray: { es: "Dados", en: "Dice" },
+  play_roll: { es: "Tirar", en: "Roll" },
+  play_empty: { es: "Aún no ha pasado nada. Escribe una acción o pulsa Narrar para empezar la escena.", en: "Nothing has happened yet. Write an action or press Narrate to start the scene." },
+  play_no_backend: { es: "No hay ningún modelo disponible. Conecta uno en Backends para narrar automáticamente — mientras tanto puedes seguir jugando escribiendo tú la narración.", en: "No model is available. Connect one under Backends to narrate automatically — meanwhile you can keep playing by writing the narration yourself." },
+  play_rejected_items: { es: "elementos rechazados", en: "rejected items" },
+
+  bible_search: { es: "Buscar…", en: "Search…" },
+  bible_new_entity: { es: "Nueva entidad", en: "New entity" },
+  bible_empty: { es: "Este mundo aún no tiene entidades. Crea la primera.", en: "This world has no entities yet. Create the first one." },
+  bible_secrets: { es: "Secretos", en: "Secrets" },
+  bible_show_secrets: { es: "Mostrar secretos", en: "Show secrets" },
+  bible_facts: { es: "Hechos establecidos", en: "Established facts" },
+  bible_relations: { es: "Relaciones", en: "Relations" },
+  bible_kind_character: { es: "Personaje", en: "Character" },
+  bible_kind_location: { es: "Lugar", en: "Location" },
+  bible_kind_faction: { es: "Facción", en: "Faction" },
+  bible_kind_item: { es: "Objeto", en: "Item" },
+  bible_kind_lore: { es: "Saber", en: "Lore" },
+  bible_kind_creature: { es: "Criatura", en: "Creature" },
+
+  timeline_empty: { es: "Aún no hay eventos en la cronología.", en: "No timeline events yet." },
+  threads_empty: { es: "No hay hilos abiertos.", en: "No open threads." },
+  clocks_empty: { es: "No hay relojes.", en: "No clocks." },
+  clocks_new: { es: "Nuevo reloj", en: "New clock" },
+  threads_new: { es: "Nuevo hilo", en: "New thread" },
+  tables_empty: { es: "Este mundo no tiene tablas aleatorias.", en: "This world has no random tables yet." },
+  tables_new: { es: "Nueva tabla", en: "New table" },
+  tables_roll: { es: "Tirar en la tabla", en: "Roll on table" },
+  sessions_empty: { es: "Todavía no hay sesiones.", en: "No sessions yet." },
+  export_chapter: { es: "Exportar capítulo (Markdown)", en: "Export chapter (Markdown)" },
+  export_bible: { es: "Exportar biblia del mundo", en: "Export world bible" },
+  export_json: { es: "Exportar mundo (JSON)", en: "Export world (JSON)" },
+
+  dice_empty: { es: "Aún no se ha tirado ningún dado.", en: "No dice rolled yet." },
+  dice_roll_button: { es: "Tirar dados", en: "Roll dice" },
+  dice_expression: { es: "Expresión (ej. 2d6+3)", en: "Expression (e.g. 2d6+3)" },
+  dice_reason: { es: "Motivo (opcional)", en: "Reason (optional)" },
+
+  backend_title: { es: "Backend de modelos compartido", en: "Shared model backend" },
+  backend_llm: { es: "Modelo de lenguaje", en: "Language model" },
+  backend_state_resolved: { es: "Conectado", en: "Connected" },
+  backend_state_unavailable: { es: "No disponible", en: "Unavailable" },
+  backend_recheck: { es: "Volver a comprobar", en: "Re-check" },
+  backend_manual: { es: "Configuración manual", en: "Manual configuration" },
+  backend_llm_url: { es: "URL del modelo", en: "Model URL" },
+  backend_llm_model: { es: "Nombre del modelo", en: "Model name" },
+  backend_faustus_url: { es: "URL de Faustus", en: "Faustus URL" },
+  backend_faustus_token: { es: "Token de Faustus", en: "Faustus token" },
+  backend_token_set: { es: "Token guardado", en: "Token saved" },
+
+  activity_empty: { es: "El asistente aún no ha hecho nada en este servidor.", en: "The assistant hasn't done anything on this server yet." },
+  activity_tool: { es: "Herramienta", en: "Tool" },
+  activity_duration: { es: "Duración", en: "Duration" },
+  activity_result: { es: "Resultado", en: "Result" },
+  activity_ok: { es: "correcto", en: "ok" },
+  activity_error: { es: "error", en: "error" },
+
+  settings_title: { es: "Ajustes", en: "Settings" },
+  settings_theme: { es: "Tema", en: "Theme" },
+  settings_theme_light: { es: "Claro", en: "Light" },
+  settings_theme_dark: { es: "Oscuro", en: "Dark" },
+  settings_theme_system: { es: "Sistema", en: "System" },
+  settings_language: { es: "Idioma de la interfaz", en: "Interface language" },
+
+  undo_confirm: { es: "¿Deshacer el último turno? Esta acción revierte todos sus cambios.", en: "Undo the last turn? This reverts everything it changed." },
+  delete_confirm: { es: "¿Seguro? Pulsa de nuevo para confirmar.", en: "Are you sure? Click again to confirm." },
+  loading: { es: "Cargando…", en: "Loading…" },
+} as const;
+
+export type DictKey = keyof typeof dict;
+
+export function detectLang(): Lang {
+  try {
+    const stored = localStorage.getItem("scheherazade.lang");
+    if (stored === "es" || stored === "en") return stored;
+  } catch {
+    /* private browsing / blocked storage: fall through */
+  }
+  return typeof navigator !== "undefined" && navigator.language?.toLowerCase().startsWith("es") ? "es" : "en";
+}
+
+export function persistLang(lang: Lang): void {
+  try {
+    localStorage.setItem("scheherazade.lang", lang);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function t(key: DictKey, lang: Lang): string {
+  return dict[key][lang];
+}
