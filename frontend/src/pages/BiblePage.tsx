@@ -186,7 +186,11 @@ export function BiblePage({ world, lang }: { world: World; lang: Lang }) {
                 <div className="panel-title">{t("bible_relations", lang)}</div>
                 {detail.relations.map((r) => (
                   <div key={r.id} style={{ fontSize: 13, marginBottom: 4 }}>
-                    {r.a_id === detail.id ? `${r.type} → ${r.b_id}` : `${r.b_id} → ${r.type}`}
+                    {r.direction === "out" ? (
+                      <>{r.type} → <button className="link-button" onClick={() => setSelectedRef(r.other_ref ?? r.other_id)}>{r.other_name}</button></>
+                    ) : (
+                      <><button className="link-button" onClick={() => setSelectedRef(r.other_ref ?? r.other_id)}>{r.other_name}</button> → {r.type}</>
+                    )}
                     {r.note && <span style={{ color: "var(--text-muted)" }}> ({r.note})</span>}
                   </div>
                 ))}

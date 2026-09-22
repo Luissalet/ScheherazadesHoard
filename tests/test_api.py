@@ -326,3 +326,57 @@ def test_not_found_message_is_not_double_quoted(world, client):
     r = client.post("/api/agent/entity_get", json={"world": world["id"], "ref": "nadie"})
     assert r.status_code == 404
     assert r.json()["message"] == "no entity matches 'nadie'"
+
+
+def test_world_search_never_returns_secrets_and_is_compact(world, client):
+    _upsert(client, world, kind="character", name="Cato", summary="erudito del puerto", secrets="robó el mapa")
+    r = client.post("/api/agent/world_search", json={"world": world["id"], "query": "puerto"})
+    body = r.json()
+    assert "robó el mapa" not in r.text
+    hit = body["entities"][0]
+    assert set(hit) == {"id", "ref", "kind", "name", "status", "summary"}
+    assert body["has_more"] is False
+
+
+def test_world_search_kind_filter_applies_before_limit(world, client):
+    for i in range(4):
+        _upsert(client, world, kind="location", name=f"Faro {i}", summary="faro")
+    _upsert(client, world, kind="character", name="Guardiana", summary="vive en el faro")
+    body = client.post("/api/agent/world_search", json={
+        "world": world["id"], "query": "faro", "kinds": ["character"], "limit": 2,
+    }).json()
+    assert [e["name"] for e in body["entities"]] == ["Guardiana"]
+
+
+def test_world_search_has_more_when_limited(world, client):
+    for i in range(3):
+        _upsert(client, world, kind="location", name=f"Isla {i}", summary="isla")
+    body = client.post("/api/agent/world_search", json={"world": world["id"], "query": "isla", "limit": 2}).json()
+    assert len(body["entities"]) == 2
+    assert body["has_more"] is True
+
+
+def test_entity_upsert_result_is_a_brief_without_secrets(world, client):
+    e = _upsert(client, world, kind="character", name="Mara", secrets="traidora")
+    assert e["created"] is True and e["ref"].startswith("E")
+    assert "secrets" not in e
+    again = _upsert(client, world, kind="character", name="Mara", summary="piloto")
+    assert again["created"] is False and again["id"] == e["id"]
+
+
+def test_entity_get_names_the_other_side_of_relations(world, client):
+    _upsert(client, world, kind="character", name="Iria")
+    _upsert(client, world, kind="character", name="Tomás")
+    client.post(f"/api/worlds/{world['id']}/relations", json={"a": "Iria", "b": "Tomás", "type": "hermana de"})
+    e = client.post("/api/agent/entity_get", json={"world": world["id"], "ref": "Tomás"}).json()
+    rel = e["relations"][0]
+    assert rel["direction"] == "in" and rel["other_name"] == "Iria" and rel["type"] == "hermana de"
+
+
+def test_entity_facts_found_even_behind_many_newer_facts(world, client):
+    _upsert(client, world, kind="character", name="Ulla")
+    client.post(f"/api/worlds/{world['id']}/facts", json={"text": "Ulla firmó el pacto", "entity_ids": ["Ulla"]})
+    for i in range(60):
+        client.post(f"/api/worlds/{world['id']}/facts", json={"text": f"hecho {i}"})
+    e = client.post("/api/agent/entity_get", json={"world": world["id"], "ref": "Ulla"}).json()
+    assert [f["text"] for f in e["facts"]] == ["Ulla firmó el pacto"]

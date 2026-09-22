@@ -40,6 +40,18 @@ export interface Relation {
   created_at: number;
 }
 
+/** A relation as seen from one entity (the entity detail endpoint). */
+export interface EntityRelation {
+  id: string;
+  type: string;
+  direction: "out" | "in";
+  other_id: string;
+  other_ref: string | null;
+  other_name: string;
+  note: string;
+  since: string;
+}
+
 export interface EntityBrief {
   ref: string;
   with?: string;
@@ -64,7 +76,7 @@ export interface Entity {
   images: string[];
   created_at: number;
   updated_at: number;
-  relations?: Relation[];
+  relations?: EntityRelation[];
   facts?: Fact[];
 }
 

@@ -476,14 +476,21 @@ def get_fact(conn: sqlite3.Connection, world_id: str, ref: str) -> dict:
 
 
 def list_facts(conn: sqlite3.Connection, world_id: str, entity_id: Optional[str] = None, limit: int = 50) -> list[dict]:
-    rows = conn.execute(
-        "SELECT * FROM facts WHERE world_id = ? ORDER BY created_at DESC LIMIT ?",
-        (world_id, limit * 4 if entity_id else limit),
-    )
-    out = [_decode_fact(dict(r)) for r in rows]
+    """Newest first. With `entity_id`, only facts linked to that entity —
+    filtered in SQL, so an entity's facts are found however many newer
+    facts about other entities exist."""
     if entity_id:
-        out = [f for f in out if entity_id in f["entity_ids"]][:limit]
-    return out
+        rows = conn.execute(
+            "SELECT * FROM facts WHERE world_id = ? AND EXISTS ("
+            " SELECT 1 FROM json_each(facts.entity_ids_json) WHERE json_each.value = ?)"
+            " ORDER BY seq DESC LIMIT ?",
+            (world_id, entity_id, limit),
+        )
+    else:
+        rows = conn.execute(
+            "SELECT * FROM facts WHERE world_id = ? ORDER BY seq DESC LIMIT ?", (world_id, limit),
+        )
+    return [_decode_fact(dict(r)) for r in rows]
 
 
 def search_facts(conn: sqlite3.Connection, world_id: str, query: str, limit: int = 8) -> list[dict]:
@@ -934,21 +941,30 @@ def search_world(
     conn: sqlite3.Connection, world_id: str, query: str,
     kinds: Optional[list[str]] = None, limit: int = 8,
 ) -> dict:
+    """Entities and facts matching `query`, best first.
+
+    Returns `limit + 1` hits of each at most so the caller can tell whether
+    there are more; `kinds` is applied in SQL, before the limit.
+    """
     entity_hits: list[dict] = []
+    for kind in kinds or []:
+        validate_kind(kind)
+    sql = (
+        "SELECT entities.* FROM entities_fts JOIN entities ON entities.id = entities_fts.id"
+        " WHERE entities_fts.world_id = ? AND entities_fts MATCH ?"
+    )
+    params: list[Any] = [world_id, _fts_query(query)]
+    if kinds:
+        sql += f" AND entities.kind IN ({','.join('?' * len(kinds))})"
+        params.extend(kinds)
+    sql += " ORDER BY bm25(entities_fts), entities.seq LIMIT ?"
+    params.append(limit + 1)
     try:
-        rows = conn.execute(
-            "SELECT entities.* FROM entities_fts JOIN entities ON entities.id = entities_fts.id"
-            " WHERE entities_fts.world_id = ? AND entities_fts MATCH ?"
-            " ORDER BY bm25(entities_fts) LIMIT ?",
-            (world_id, _fts_query(query), limit),
-        )
-        entity_hits = [_decode_entity(dict(r)) for r in rows]
+        entity_hits = [_decode_entity(dict(r)) for r in conn.execute(sql, params)]
     except sqlite3.OperationalError:
         entity_hits = []
-    if kinds:
-        entity_hits = [e for e in entity_hits if e["kind"] in kinds]
-    fact_hits = search_facts(conn, world_id, query, limit=limit)
-    return {"entities": entity_hits[:limit], "facts": fact_hits[:limit]}
+    fact_hits = search_facts(conn, world_id, query, limit=limit + 1)
+    return {"entities": entity_hits, "facts": fact_hits}
 
 
 # ---------------------------------------------------------------------------

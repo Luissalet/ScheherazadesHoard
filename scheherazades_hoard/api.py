@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from pydantic import BaseModel, Field
 
 from . import __version__, backend, consistency, context as context_mod
-from . import db, delta as delta_mod, dice, export, narrator, prospero, store, tables
+from . import db, delta as delta_mod, dice, export, narrator, prospero, store, tables, views
 
 SERVICE = "scheherazades-hoard"
 DISPLAY_NAME = "Scheherazade's Hoard"
@@ -625,19 +625,27 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     @agent_call("world_search")
     async def a_world_search(body: WorldSearchBody):
         wid = store.resolve_world_id(C(), body.world)
-        return store.search_world(C(), wid, body.query, body.kinds, body.limit)
+        limit = max(1, min(body.limit, 25))
+        hits = store.search_world(C(), wid, body.query, body.kinds, limit)
+        return {
+            "entities": [views.entity_brief(e) for e in hits["entities"][:limit]],
+            "facts": [views.fact_brief(f) for f in hits["facts"][:limit]],
+            "has_more": len(hits["entities"]) > limit or len(hits["facts"]) > limit,
+        }
 
     @app.post("/api/agent/entity_get")
     @agent_call("entity_get")
     async def a_entity_get(body: EntityGetBody):
         wid = store.resolve_world_id(C(), body.world)
-        return _entity_detail(C(), wid, body.ref, body.include_secrets)
+        return views.entity_detail(C(), wid, body.ref, body.include_secrets)
 
     @app.post("/api/agent/entity_upsert")
     @agent_call("entity_upsert")
     async def a_entity_upsert(body: EntityUpsertBody):
         wid = store.resolve_world_id(C(), body.world)
-        return store.upsert_entity(C(), wid, body.kind, body.name, **body.model_dump(exclude={"world", "kind", "name"}, exclude_none=True))
+        before = {e["id"] for e in store.list_entities(C(), wid, limit=100000)}
+        e = store.upsert_entity(C(), wid, body.kind, body.name, **body.model_dump(exclude={"world", "kind", "name"}, exclude_none=True))
+        return {**views.entity_brief(e), "created": e["id"] not in before}
 
     @app.post("/api/agent/story_append")
     @agent_call("story_append")
@@ -720,11 +728,13 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     # so FastAPI/TestClient JSON works the same as the other agent routes.
 
     def _entity_detail(conn_, world_id: str, ref: str, include_secrets: bool) -> dict:
+        """The Bible page's full view: every column (secrets only when
+        asked), relations with the other side named, and up to 50 facts."""
         e = store.get_entity(conn_, world_id, ref)
         if not include_secrets:
-            e = {k: v for k, v in e.items() if k != "secrets"}
-        e["relations"] = store.list_relations(conn_, world_id, e["id"] if "id" in e else store.resolve_entity_id(conn_, world_id, ref))
-        e["facts"] = store.list_facts(conn_, world_id, store.resolve_entity_id(conn_, world_id, ref), limit=50)
+            e.pop("secrets", None)
+        e["relations"] = [views.relation_view(conn_, world_id, r, e["id"]) for r in store.list_relations(conn_, world_id, e["id"])]
+        e["facts"] = store.list_facts(conn_, world_id, e["id"], limit=50)
         return e
 
     # -- static frontend ----------------------------------------------------
