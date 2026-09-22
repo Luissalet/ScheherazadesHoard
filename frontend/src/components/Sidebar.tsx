@@ -37,8 +37,19 @@ export function Sidebar({
   return (
     <nav className={`sidebar${mobileOpen ? " open" : ""}`}>
       <div className="sidebar-brand">
-        <div className="sidebar-brand-icon">
-          <Feather size={16} />
+        <div className="sidebar-brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 64 64" width="16" height="16">
+            <defs>
+              <radialGradient id="brandGradient" cx="30%" cy="25%" r="90%">
+                <stop offset="0" stopColor="#f2b84b" />
+                <stop offset=".55" stopColor="#5a63e0" />
+                <stop offset="1" stopColor="#241f4f" />
+              </radialGradient>
+            </defs>
+            <rect width="64" height="64" rx="16" fill="url(#brandGradient)" />
+            <path d="M40 16a17 17 0 1 0 8 30.8A13.5 13.5 0 0 1 40 16z" fill="#fdf8ec" />
+            <path d="M23 20l1.8 4.2L29 26l-4.2 1.8L23 32l-1.8-4.2L17 26l4.2-1.8z" fill="#fdf8ec" />
+          </svg>
         </div>
         <div className="sidebar-brand-name">{t("appName", lang)}</div>
         <button className="icon-button sidebar-close" style={{ marginLeft: "auto" }} onClick={onCloseMobile} aria-label="close">

@@ -1,4 +1,4 @@
-# Scheherazade's Hoard
+# <img src="frontend/public/favicon.svg" width="28" height="28" alt="" align="center" /> Scheherazade's Hoard
 ### ¿Quién sigue vivo? ¿Quién está dónde? ¿Qué les has prometido?
 **Un guardián de la coherencia y el estado del mundo para ficción interactiva y partidas de rol — recuerda todo lo que un modelo de lenguaje olvida, y le da al narrador exactamente lo que necesita para la siguiente escena.**
 

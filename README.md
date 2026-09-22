@@ -1,4 +1,4 @@
-# Scheherazade's Hoard
+# <img src="frontend/public/favicon.svg" width="28" height="28" alt="" align="center" /> Scheherazade's Hoard
 ### Who's alive? Who's where? What have you promised them?
 **A world-state and continuity keeper for interactive fiction and tabletop play — it remembers everything a language model forgets, and hands the narrator exactly the slice it needs for the next scene.**
 
