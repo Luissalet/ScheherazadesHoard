@@ -140,14 +140,17 @@ export function ThreadsClocksPage({ world, lang }: { world: World; lang: Lang })
         <div className="kanban" style={{ marginBottom: 24 }}>
           {STATUSES.map((status) => (
             <div key={status} className="kanban-col">
-              <div className="panel-title"><Badge kind={statusKind(status)}>{status}</Badge></div>
+              <div className="panel-title"><Badge kind={statusKind(status)}>{t(`status_${status}`, lang)}</Badge></div>
+              {threads.filter((th) => th.status === status).length === 0 && (
+                <div className="kanban-empty">{t("kanban_empty", lang)}</div>
+              )}
               {threads.filter((th) => th.status === status).map((th) => (
                 <div key={th.id} className="card">
                   <strong style={{ fontSize: 13 }}>{th.title}</strong>
                   {th.notes && <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "4px 0" }}>{th.notes}</p>}
                   <div className="tag-row" style={{ marginTop: 6 }}>
                     {STATUSES.filter((s) => s !== status).map((s) => (
-                      <button key={s} className="btn btn-sm" onClick={() => changeStatus(th, s)}>{s}</button>
+                      <button key={s} className="btn btn-sm" onClick={() => changeStatus(th, s)}>→ {t(`status_${s}`, lang)}</button>
                     ))}
                   </div>
                 </div>
@@ -159,7 +162,7 @@ export function ThreadsClocksPage({ world, lang }: { world: World; lang: Lang })
 
       {addingThread ? (
         <div className="card" style={{ marginBottom: 24, maxWidth: 420 }}>
-          <Field label={t("world_name", lang)}>
+          <Field label={t("thread_title", lang)}>
             <input value={threadTitle} onChange={(e) => setThreadTitle(e.target.value)} autoFocus />
           </Field>
           <div style={{ display: "flex", gap: 8 }}>

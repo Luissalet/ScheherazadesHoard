@@ -1,7 +1,7 @@
 export type Lang = "es" | "en";
 
 const dict = {
-  appName: { es: "El Tesoro de Scheherazade", en: "Scheherazade's Hoard" },
+  appName: { es: "Scheherazade's Hoard", en: "Scheherazade's Hoard" },
   nav_worlds: { es: "Mundos", en: "Worlds" },
   nav_play: { es: "Jugar", en: "Play" },
   nav_bible: { es: "Biblia", en: "Bible" },
@@ -19,6 +19,16 @@ const dict = {
   worlds_empty: { es: "Aún no has creado ningún mundo. Crea el primero para empezar a narrar.", en: "You haven't created a world yet. Create your first one to start narrating." },
   worlds_new: { es: "Nuevo mundo", en: "New world" },
   worlds_open: { es: "Abrir", en: "Open" },
+  worlds_entities: { es: "entidades", en: "entities" },
+  worlds_open_threads: { es: "hilos abiertos", en: "open threads" },
+  worlds_session_one: { es: "sesión", en: "session" },
+  worlds_session_many: { es: "sesiones", en: "sessions" },
+  status_open: { es: "Abierto", en: "Open" },
+  status_advanced: { es: "Avanzado", en: "Advanced" },
+  status_resolved: { es: "Resuelto", en: "Resolved" },
+  status_abandoned: { es: "Abandonado", en: "Abandoned" },
+  thread_title: { es: "Título del hilo", en: "Thread title" },
+  kanban_empty: { es: "Nada aquí todavía", en: "Nothing here yet" },
   world_name: { es: "Nombre", en: "Name" },
   world_genre: { es: "Género", en: "Genre" },
   world_tone: { es: "Tono", en: "Tone" },

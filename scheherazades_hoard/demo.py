@@ -232,7 +232,7 @@ def seed_demo_world(conn) -> dict:
     add("dialogue", "user", "«Deberíamos zarpar antes de que suba la marea», le digo a Tomás.")
     add("dialogue", "narrator", "Tomás no levanta la vista de la red. «La marea siempre sube. La pregunta es adónde vamos.»")
     r1 = logged_move("sagacidad", 101, "Marisol recuerda el rumbo de la Brújula de Hueso")
-    add("roll", "agent", f"Marisol intenta recordar el rumbo que la Brújula de Hueso señaló anoche (2d6+sagacidad = {r1['total']}).",
+    add("roll", "agent", "Marisol intenta recordar el rumbo que la Brújula de Hueso señaló anoche (2d6+sagacidad).",
         rolls=[r1])
     add("narration", "narrator",
         "Un golpe parcial: recuerda casi todo, salvo un detalle que se le escapa entre la niebla — "
@@ -241,7 +241,7 @@ def seed_demo_world(conn) -> dict:
                                "entity_ids": [brujula["ref"], bancos["ref"]]}]})
     add("action", "user", "Reviso el casco en busca de daños antes de decidir nada.")
     r2 = logged_move("brutalidad", 201, "Marisol revisa el casco del Argento II")
-    add("roll", "agent", f"Marisol revisa el casco palmo a palmo (2d6+brutalidad = {r2['total']}).",
+    add("roll", "agent", "Marisol revisa el casco palmo a palmo (2d6+brutalidad).",
         rolls=[r2])
     add("narration", "narrator",
         "El casco aguanta, pero por poco. Tomás señala una vía de agua nueva cerca de la quilla — "

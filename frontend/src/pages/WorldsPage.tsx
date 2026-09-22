@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Plus, Upload, Users } from "lucide-react";
+import { BookOpen, GitBranch, Plus, Upload, Users } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
@@ -128,9 +128,10 @@ export function WorldsPage({
               </p>
               {w.counts && (
                 <div className="tag-row" style={{ marginBottom: 12 }}>
-                  <span className="badge"><Users size={11} /> {w.counts.entities}</span>
-                  <span className="badge badge-gold">{w.counts.open_threads}</span>
-                  <span className="badge">{w.counts.sessions} sesiones</span>
+                  <span className="badge" title={t("worlds_entities", lang)}><Users size={11} /> {w.counts.entities} {t("worlds_entities", lang)}</span>
+                  <span className="badge badge-gold" title={t("worlds_open_threads", lang)}><GitBranch size={11} /> {w.counts.open_threads} {t("worlds_open_threads", lang)}</span>
+                  <span className="badge">{w.counts.sessions} {t(w.counts.sessions === 1 ? "worlds_session_one" : "worlds_session_many", lang)}</span>
+                  <span className="badge">{w.ruleset}</span>
                 </div>
               )}
               <button className="btn btn-primary btn-sm" onClick={() => onSelect(w.id)}>

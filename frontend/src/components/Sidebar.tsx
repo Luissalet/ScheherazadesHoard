@@ -41,7 +41,7 @@ export function Sidebar({
           <Feather size={16} />
         </div>
         <div className="sidebar-brand-name">{t("appName", lang)}</div>
-        <button className="icon-button" style={{ marginLeft: "auto" }} onClick={onCloseMobile} aria-label="close">
+        <button className="icon-button sidebar-close" style={{ marginLeft: "auto" }} onClick={onCloseMobile} aria-label="close">
           <X size={16} />
         </button>
       </div>
