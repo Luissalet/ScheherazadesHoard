@@ -71,11 +71,25 @@ def test_chapter_leaves_raya_dialogue_untouched(conn, world):
     assert "“—Vamos" not in md
 
 
-def test_chapter_still_quotes_plain_dialogue(conn, world):
+def test_chapter_gives_model_dialogue_its_opening_raya(conn, world):
+    # What a model actually sends: the spoken words with a raya aside,
+    # but no opening dash. A Spanish chapter must not wrap it in quotes.
     sess = store.get_or_create_current_session(conn, world["id"])
+    store.append_turn(conn, world["id"], sess["id"], "dialogue", "narrator",
+                      text="No ha vuelto desde el martes —dice Rosalía—. Y su farol sigue apagado.")
     store.append_turn(conn, world["id"], sess["id"], "dialogue", "narrator", text="Vamos ya.")
     md = export.session_to_markdown(conn, world["id"])
-    assert "“Vamos ya.”" in md
+    assert "—No ha vuelto desde el martes —dice Rosalía—. Y su farol sigue apagado." in md
+    assert "—Vamos ya." in md
+    assert "“" not in md and "”" not in md
+
+
+def test_chapter_quotes_plain_dialogue_in_an_english_world(conn):
+    w = store.create_world(conn, "Harbour", language="en")
+    sess = store.get_or_create_current_session(conn, w["id"])
+    store.append_turn(conn, w["id"], sess["id"], "dialogue", "narrator", text="Let's go.")
+    md = export.session_to_markdown(conn, w["id"])
+    assert "“Let's go.”" in md
 
 
 def test_chapter_title_is_the_sessions_own_localized_default(conn, world):

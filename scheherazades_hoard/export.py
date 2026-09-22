@@ -29,6 +29,23 @@ def polish_prompt(chapter_markdown: str) -> str:
 
 
 _RAYA_DIALOGUE_RE = re.compile(r"^[—–-]\s?\S")
+# An inner raya aside: "... —dice Rosalía—. ..." or "... —susurra Tobías."
+_RAYA_ASIDE_RE = re.compile(r"\s—\S")
+
+
+def _dialogue_line(text: str, language: str) -> str:
+    """One dialogue turn as a manuscript would print it.
+
+    Raya dialogue that already opens with its dash is left as is. A model
+    usually sends only the spoken words ("No ha vuelto —dice Rosalía—."),
+    so a Spanish world, or any line carrying a raya aside, gets the
+    opening raya it is missing; wrapping that in English quotes would be
+    wrong. Everything else gets typographic quotes."""
+    if _RAYA_DIALOGUE_RE.match(text):
+        return text
+    if (language or "").lower().startswith("es") or _RAYA_ASIDE_RE.search(text):
+        return f"—{text}"
+    return f"“{text}”"
 
 
 def session_to_markdown(conn, world_id: str, session_ref: Optional[str] = None) -> str:
@@ -47,10 +64,7 @@ def session_to_markdown(conn, world_id: str, session_ref: Optional[str] = None) 
         if not text or t["role"] in ("roll", "ooc", "system"):
             continue
         if t["role"] == "dialogue":
-            # Spanish-style raya dialogue ("—Vamos —dijo Iria.") already
-            # carries its own punctuation; wrapping it in English curly
-            # quotes on top would be wrong. Only plain dialogue gets them.
-            lines.append(text if _RAYA_DIALOGUE_RE.match(text) else f"“{text}”")
+            lines.append(_dialogue_line(text, world.get("language") or ""))
         elif t["role"] == "action":
             lines.append(f"*{text}*")
         else:
