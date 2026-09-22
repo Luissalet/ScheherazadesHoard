@@ -111,6 +111,6 @@ async def narrate(
         "context": ctx,
         "model": chat_result.model,
         "provider": chat_result.provider,
-        "usage": chat_result.usage,
+        "usage": chat_result.usage.to_dict(),
         "elapsed_ms": chat_result.elapsed_ms,
     }

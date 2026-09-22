@@ -242,6 +242,7 @@ export interface BackendStatus {
     only_resident: boolean;
   };
   checked_at: number;
+  config_error?: string;
 }
 
 export interface AgentCall {

@@ -96,6 +96,12 @@ const dict = {
   backend_faustus_url: { es: "URL de Faustus", en: "Faustus URL" },
   backend_faustus_token: { es: "Token de Faustus", en: "Faustus token" },
   backend_token_set: { es: "Token guardado", en: "Token saved" },
+  backend_token_clear: { es: "Quitar token", en: "Remove token" },
+  backend_manual_hint: {
+    es: "Déjalo vacío para usar lo que ya sirve Faustus o un servidor local (llama.cpp, Ollama con un modelo cargado u otro servidor compatible con OpenAI). Nunca se carga un modelo propio.",
+    en: "Leave empty to use what Faustus or a local server (llama.cpp, Ollama with a loaded model, or another OpenAI-compatible server) already serves. This app never loads a model of its own.",
+  },
+  backend_config_error: { es: "backend.json no es válido; se usan los valores por defecto", en: "backend.json is invalid; defaults are in use" },
 
   activity_empty: { es: "El asistente aún no ha hecho nada en este servidor.", en: "The assistant hasn't done anything on this server yet." },
   activity_tool: { es: "Herramienta", en: "Tool" },

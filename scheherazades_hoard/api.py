@@ -275,7 +275,7 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     app.state.conn = conn
     app.state.port = port
     app.state.data_dir = data_dir
-    app.state.link = backend.Link(backend.LinkConfig.load(backend_json, app="scheherazades-hoard"))
+    app.state.link, app.state.backend_config_error = backend.load_link(backend_json)
     app.state.backend_json = backend_json
 
     # -- browser-attack guard (DNS rebinding + basic CSRF), all routes -----
@@ -389,28 +389,30 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
             "status": "ok", "worlds": len(worlds),
         }
 
+    async def _reload_link() -> None:
+        """A fresh Link: new config and an empty probe cache (Re-check)."""
+        old = app.state.link
+        app.state.link, app.state.backend_config_error = backend.load_link(app.state.backend_json)
+        await old.aclose()
+
     @app.get("/api/backend")
     async def get_backend():
-        status = await L().status()
-        status["ffmpeg"] = None  # this app has no media pipeline; kept for a uniform Settings screen
-        return status
+        return await backend.status(L(), app.state.backend_config_error)
 
     @app.post("/api/backend/recheck")
     async def recheck_backend():
-        await L().resolve("llm", force=True)
-        return await L().status()
+        await _reload_link()
+        return await backend.status(L(), app.state.backend_config_error)
 
     @app.post("/api/backend/settings")
     async def set_backend_settings(body: BackendSettingsBody):
-        current: dict = {}
-        if app.state.backend_json.exists():
-            current = db.loads(app.state.backend_json.read_text(encoding="utf-8"), {})
-        for key, value in body.model_dump(exclude_none=True).items():
-            current[key] = value
-        app.state.backend_json.write_text(db.dumps(current), encoding="utf-8")
-        app.state.link = backend.Link(backend.LinkConfig.load(app.state.backend_json, app="scheherazades-hoard"))
-        status = await app.state.link.status()
-        return status
+        for key in ("llm_url", "faustus_url"):
+            value = getattr(body, key)
+            if value and not value.strip().lower().startswith(("http://", "https://")):
+                raise HTTPException(400, {"error": "bad_request", "message": f"{key} must start with http:// or https://"})
+        backend.apply_settings(app.state.backend_json, body.model_dump())
+        await _reload_link()
+        return await backend.status(L(), app.state.backend_config_error)
 
     # -- worlds (UI reads + direct human edits) ----------------------------
 

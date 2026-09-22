@@ -44,15 +44,14 @@ export function BackendsPage({ lang }: { lang: Lang }) {
     }
   }
 
-  async function saveSettings() {
+  async function saveSettings(clearToken = false) {
     setBusy(true);
     setError(null);
     try {
-      const body: Record<string, string> = {};
-      if (llmUrl) body.llm_url = llmUrl;
-      if (llmModel) body.llm_model = llmModel;
-      if (faustusUrl) body.faustus_url = faustusUrl;
-      if (faustusToken) body.faustus_token = faustusToken;
+      // Empty fields are sent as "" so an override can be removed; the
+      // token is only sent when typed (or explicitly removed).
+      const body: Record<string, string> = { llm_url: llmUrl, llm_model: llmModel, faustus_url: faustusUrl };
+      if (faustusToken || clearToken) body.faustus_token = clearToken ? "" : faustusToken;
       setStatus(await api.setBackendSettings(body));
       setFaustusToken("");
     } catch (e) {
@@ -85,8 +84,11 @@ export function BackendsPage({ lang }: { lang: Lang }) {
               {status.llm.model && <Badge kind="gold">{status.llm.model}</Badge>}
             </div>
             {status.llm.url && <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "2px 0" }}>{status.llm.url}</p>}
-            {status.llm.state === "unavailable" && status.llm.reason && (
-              <p style={{ fontSize: 12, color: "var(--text-muted)" }}>{status.llm.reason}</p>
+            {status.llm.reason && (
+              <p style={{ fontSize: 12, color: "var(--text-muted)", overflowWrap: "anywhere" }}>{status.llm.reason}</p>
+            )}
+            {status.config_error && (
+              <p style={{ fontSize: 12, color: "var(--danger)" }}>{t("backend_config_error", lang)}: {status.config_error}</p>
             )}
           </div>
         )}
@@ -94,14 +96,15 @@ export function BackendsPage({ lang }: { lang: Lang }) {
 
       <div className="card" style={{ maxWidth: 560 }}>
         <div className="panel-title">{t("backend_manual", lang)}</div>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 0 }}>{t("backend_manual_hint", lang)}</p>
         <Field label={t("backend_llm_url", lang)}>
-          <input value={llmUrl} onChange={(e) => setLlmUrl(e.target.value)} placeholder="http://127.0.0.1:11434" />
+          <input value={llmUrl} onChange={(e) => setLlmUrl(e.target.value)} placeholder="http://127.0.0.1:8081/v1/chat/completions" />
         </Field>
         <Field label={t("backend_llm_model", lang)}>
           <input value={llmModel} onChange={(e) => setLlmModel(e.target.value)} placeholder="qwen2.5:14b" />
         </Field>
         <Field label={t("backend_faustus_url", lang)}>
-          <input value={faustusUrl} onChange={(e) => setFaustusUrl(e.target.value)} placeholder="http://127.0.0.1:8800" />
+          <input value={faustusUrl} onChange={(e) => setFaustusUrl(e.target.value)} placeholder="http://127.0.0.1:7000" />
         </Field>
         <Field label={t("backend_faustus_token", lang)}>
           <input
@@ -111,7 +114,12 @@ export function BackendsPage({ lang }: { lang: Lang }) {
             placeholder={status?.config.token_set ? t("backend_token_set", lang) : ""}
           />
         </Field>
-        <button className="btn btn-primary btn-sm" disabled={busy} onClick={saveSettings}>{t("save", lang)}</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => saveSettings()}>{t("save", lang)}</button>
+          {status?.config.token_set && (
+            <button className="btn btn-sm" disabled={busy} onClick={() => saveSettings(true)}>{t("backend_token_clear", lang)}</button>
+          )}
+        </div>
       </div>
     </div>
   );

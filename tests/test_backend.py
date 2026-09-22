@@ -1,197 +1,143 @@
-"""Unit tests for the Hoard Link adapter (offline, httpx.MockTransport)."""
+"""The app's wrapper around the vendored Hoard Link (offline, httpx.MockTransport).
+
+Hoard Link's own resolution order and policies are tested in its own
+repository; these tests cover what this app adds on top: the Settings
+form mapping, token redaction, a broken backend.json, and that chat goes
+through the vendored package.
+"""
 from __future__ import annotations
+
+import json
+from pathlib import Path
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 
-from scheherazades_hoard.backend import BackendError, Link, LinkConfig, Unavailable
+from scheherazades_hoard import backend
+from scheherazades_hoard.api import create_app
+from scheherazades_hoard.backend import Link, LinkConfig, Unavailable
+
+PORT = 18862
+VENDORED = Path(backend.__file__).parent / "hoard_link"
 
 
 def _refuse(request: httpx.Request) -> httpx.Response:
     raise httpx.ConnectError("connection refused", request=request)
 
 
-async def test_nothing_reachable_is_unavailable():
-    link = Link(LinkConfig(), transport=httpx.MockTransport(_refuse))
-    res = await link.resolve("llm")
-    assert res.state == "unavailable"
-    assert "not reachable" in res.reason or "no llama.cpp" in res.reason
+def _link(config: LinkConfig, handler=_refuse) -> Link:
+    return Link(config, client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
 
 
-async def test_explicit_config_wins_over_everything():
-    link = Link(LinkConfig(llm_url="http://127.0.0.1:9999/v1/chat/completions", llm_model="m"), transport=httpx.MockTransport(_refuse))
-    res = await link.resolve("llm")
-    assert res.state == "resolved"
-    assert res.provider == "configured"
-    assert res.api == "openai"
+def test_hoard_link_is_vendored_with_its_provenance():
+    assert (VENDORED / "link.py").is_file() and (VENDORED / "LICENSE").is_file()
+    text = (VENDORED / "VENDORED.txt").read_text(encoding="utf-8")
+    assert "Commit:" in text
+    assert backend.Link.__module__.startswith("scheherazades_hoard.hoard_link")
 
 
-async def test_faustus_with_valid_token_resolves():
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/api/health":
-            assert request.headers.get("authorization") == "Bearer ody_test"
-            return httpx.Response(200, json={"status": "healthy"})
-        if request.url.path == "/api/models":
-            return httpx.Response(200, json={"items": [
-                {"url": "http://127.0.0.1:8081/v1/chat/completions", "models": ["qwen-27b"],
-                 "model_type": "llm", "backend": "llamacpp", "endpoint_name": "main"},
-            ]})
-        raise httpx.ConnectError("refused", request=request)
-
-    cfg = LinkConfig(faustus_url="http://127.0.0.1:7000", faustus_token="ody_test")
-    link = Link(cfg, transport=httpx.MockTransport(handler))
-    res = await link.resolve("llm")
-    assert res.state == "resolved"
-    assert res.provider == "llamacpp"
-    assert res.model == "qwen-27b"
-    assert "Faustus registry" in res.reason
+def test_settings_form_maps_onto_the_hoard_link_schema(tmp_path):
+    path = tmp_path / "backend.json"
+    backend.apply_settings(path, {
+        "llm_url": "http://127.0.0.1:8081/v1/chat/completions", "llm_model": "qwen-27b",
+        "faustus_url": "http://127.0.0.1:7000", "faustus_token": "ody_secret", "allow_load": False,
+    })
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["capabilities"]["llm"] == {
+        "url": "http://127.0.0.1:8081/v1/chat/completions", "model": "qwen-27b", "allow_load": False,
+    }
+    assert data["faustus"] == {"url": "http://127.0.0.1:7000", "token": "ody_secret"}
+    cfg = LinkConfig.load(path, env={})
+    assert cfg.capability("llm").url.endswith("/v1/chat/completions")
+    assert cfg.faustus_token == "ody_secret"
 
 
-async def test_faustus_401_is_recorded_and_falls_through():
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/api/health" and ":7000" in str(request.url):
-            return httpx.Response(401)
-        raise httpx.ConnectError("refused", request=request)
-
-    link = Link(LinkConfig(), transport=httpx.MockTransport(handler))
-    res = await link.resolve("llm")
-    assert res.state == "unavailable"
-    assert "needs a token" in res.reason
+def test_empty_string_clears_an_override_and_none_keeps_it(tmp_path):
+    path = tmp_path / "backend.json"
+    backend.apply_settings(path, {"llm_url": "http://127.0.0.1:1234/v1/chat/completions", "faustus_token": "t"})
+    backend.apply_settings(path, {"llm_url": "", "faustus_token": None})
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert "llm" not in data["capabilities"]
+    assert data["faustus"]["token"] == "t"
 
 
-async def test_llamacpp_probe_resolves_with_model_and_idle_state():
-    def handler(request: httpx.Request) -> httpx.Response:
-        if ":8080" in str(request.url) and request.url.path == "/props":
-            return httpx.Response(200, json={"model_path": "/models/qwen3-27b-q8.gguf"})
-        if ":8080" in str(request.url) and request.url.path == "/slots":
-            return httpx.Response(200, json=[{"is_processing": True}])
-        raise httpx.ConnectError("refused", request=request)
-
-    link = Link(LinkConfig(), transport=httpx.MockTransport(handler))
-    res = await link.resolve("llm")
-    assert res.state == "resolved"
-    assert res.provider == "llamacpp"
-    assert res.model == "qwen3-27b-q8"
-    assert res.details["idle"] is False
-    assert "busy" in res.reason
-
-
-async def test_ollama_resolves_only_when_resident():
-    def handler(request: httpx.Request) -> httpx.Response:
-        if ":11434" in str(request.url) and request.url.path == "/api/ps":
-            return httpx.Response(200, json={"models": [{"name": "qwen3:8b"}]})
-        raise httpx.ConnectError("refused", request=request)
-
-    link = Link(LinkConfig(), transport=httpx.MockTransport(handler))
-    res = await link.resolve("llm")
-    assert res.state == "resolved"
-    assert res.provider == "ollama"
-    assert res.model == "qwen3:8b"
-
-
-async def test_ollama_not_resident_is_unavailable_by_default():
-    def handler(request: httpx.Request) -> httpx.Response:
-        if ":11434" in str(request.url) and request.url.path == "/api/ps":
-            return httpx.Response(200, json={"models": []})
-        raise httpx.ConnectError("refused", request=request)
-
-    link = Link(LinkConfig(), transport=httpx.MockTransport(handler))
-    res = await link.resolve("llm")
-    assert res.state == "unavailable"
-
-
-async def test_resolution_is_cached_within_window():
-    calls = {"n": 0}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls["n"] += 1
-        if ":8080" in str(request.url) and request.url.path == "/props":
-            return httpx.Response(200, json={"model_path": "/m.gguf"})
-        raise httpx.ConnectError("refused", request=request)
-
-    link = Link(LinkConfig(), transport=httpx.MockTransport(handler))
-    await link.resolve("llm")
-    n_after_first = calls["n"]
-    await link.resolve("llm")
-    assert calls["n"] == n_after_first  # cached, no new probes
-
-
-async def test_chat_strips_think_tags_and_exposes_reasoning():
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/props":
-            return httpx.Response(200, json={"model_path": "/m.gguf"})
-        if request.url.path == "/slots":
-            return httpx.Response(200, json=[{"is_processing": False}])
-        if request.url.path == "/v1/chat/completions":
-            return httpx.Response(200, json={
-                "choices": [{"message": {"content": "<think>plan</think>Hola"}}],
-                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
-            })
-        raise httpx.ConnectError("refused", request=request)
-
-    link = Link(LinkConfig(), transport=httpx.MockTransport(handler))
-    result = await link.chat([{"role": "user", "content": "hi"}])
-    assert result.text == "Hola"
-    assert "plan" in result.reasoning
-
-
-async def test_chat_ollama_image_and_message_shape():
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/api/ps":
-            return httpx.Response(200, json={"models": [{"name": "qwen3:8b"}]})
-        if request.url.path == "/api/chat":
-            body = request.read()
-            import json as _json
-            payload = _json.loads(body)
-            assert payload["model"] == "qwen3:8b"
-            assert payload["stream"] is False
-            return httpx.Response(200, json={"message": {"content": "hola"}, "eval_count": 2, "prompt_eval_count": 3})
-        raise httpx.ConnectError("refused", request=request)
-
-    link = Link(LinkConfig(), transport=httpx.MockTransport(handler))
-    result = await link.chat([{"role": "user", "content": "hi"}])
-    assert result.api == "ollama"
-    assert result.text == "hola"
-    assert result.usage["completion_tokens"] == 2
-
-
-async def test_chat_raises_unavailable_when_nothing_resolves():
-    link = Link(LinkConfig(), transport=httpx.MockTransport(_refuse))
-    with pytest.raises(Unavailable):
-        await link.chat([{"role": "user", "content": "hi"}])
-
-
-async def test_chat_raises_backend_error_on_http_failure():
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/props":
-            return httpx.Response(200, json={"model_path": "/m.gguf"})
-        if request.url.path == "/slots":
-            return httpx.Response(200, json=[{"is_processing": False}])
-        if request.url.path == "/v1/chat/completions":
-            return httpx.Response(500, text="internal error")
-        raise httpx.ConnectError("refused", request=request)
-
-    link = Link(LinkConfig(), transport=httpx.MockTransport(handler))
-    with pytest.raises(BackendError):
-        await link.chat([{"role": "user", "content": "hi"}])
-
-
-async def test_wait_idle_true_when_no_llamacpp_busy_signal():
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/api/ps":
-            return httpx.Response(200, json={"models": [{"name": "m"}]})
-        raise httpx.ConnectError("refused", request=request)
-
-    link = Link(LinkConfig(), transport=httpx.MockTransport(handler))
-    assert await link.wait_idle("llm", max_wait_s=1) is True
-
-
-def test_sync_facade_runs_status():
-    link = Link(LinkConfig(), transport=httpx.MockTransport(_refuse))
-    status = link.sync.status()
+async def test_status_never_contains_the_token(tmp_path):
+    path = tmp_path / "backend.json"
+    backend.apply_settings(path, {"faustus_url": "http://127.0.0.1:7000", "faustus_token": "ody_secret"})
+    link = _link(LinkConfig.load(path, env={}))
+    status = await backend.status(link)
+    assert "ody_secret" not in json.dumps(status)
+    assert status["config"]["token_set"] is True
     assert status["llm"]["state"] == "unavailable"
+    assert status["llm"]["reason"]  # a sentence the Settings screen can show
+    await link.aclose()
 
 
-def test_env_overrides_backend_json(monkeypatch):
-    cfg = LinkConfig.load(None, env={"HOARD_LLM_URL": "http://127.0.0.1:1/v1/chat/completions"})
-    assert cfg.llm_url == "http://127.0.0.1:1/v1/chat/completions"
+def test_broken_backend_json_still_starts_and_says_why(tmp_path):
+    path = tmp_path / "backend.json"
+    path.write_text("{not json", encoding="utf-8")
+    link, error = backend.load_link(path, env={})
+    assert isinstance(link, Link)
+    assert error and "not valid JSON" in error
+
+
+async def test_chat_goes_through_the_vendored_link_and_strips_think_tags():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/chat/completions":
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(200, json={
+                "choices": [{"message": {"content": "<think>plan</think>La marea sube."}}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+            })
+        return _refuse(request)
+
+    cfg = LinkConfig.load(None, env={"HOARD_LLM_URL": "http://127.0.0.1:8081/v1/chat/completions",
+                                     "HOARD_LLM_MODEL": "qwen-27b"})
+    link = _link(cfg, handler)
+    result = await link.chat([{"role": "user", "content": "hola"}], max_tokens=20)
+    assert result.text == "La marea sube."
+    assert result.reasoning and "plan" in result.reasoning
+    assert seen["body"]["model"] == "qwen-27b"
+    await link.aclose()
+
+
+async def test_nothing_reachable_raises_unavailable_with_reasons():
+    link = _link(LinkConfig.load(None, env={}))
+    with pytest.raises(Unavailable) as info:
+        await link.chat([{"role": "user", "content": "hola"}])
+    assert info.value.reasons
+    await link.aclose()
+
+
+# --- HTTP surface -----------------------------------------------------------
+
+@pytest.fixture()
+def client(tmp_path):
+    app = create_app(tmp_path / "data", port=PORT)
+    with TestClient(app, base_url=f"http://127.0.0.1:{PORT}") as c:
+        yield c
+
+
+def test_settings_endpoint_round_trip_without_leaking_the_token(client):
+    r = client.post("/api/backend/settings", json={
+        "llm_url": "http://127.0.0.1:8081/v1/chat/completions", "llm_model": "qwen-27b", "faustus_token": "ody_x",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert "ody_x" not in r.text
+    assert body["config"]["token_set"] is True
+    assert body["llm"]["state"] == "resolved" and body["llm"]["model"] == "qwen-27b"
+    assert "explicit configuration" in body["llm"]["reason"]
+
+    r = client.post("/api/backend/settings", json={"llm_url": ""})
+    assert r.json()["config"]["llm_url"] is None
+    assert "ody_x" not in client.get("/api/backend").text
+
+
+def test_settings_rejects_a_url_without_scheme(client):
+    r = client.post("/api/backend/settings", json={"llm_url": "127.0.0.1:8081"})
+    assert r.status_code == 400
+    assert "http://" in r.json()["message"]

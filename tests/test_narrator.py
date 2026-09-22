@@ -30,7 +30,9 @@ def _link_with_content(content: str) -> Link:
             return httpx.Response(200, json={"choices": [{"message": {"content": content}}], "usage": {}})
         raise httpx.ConnectError("refused", request=request)
 
-    return Link(LinkConfig(), transport=httpx.MockTransport(handler))
+    # The vendored Hoard Link, probing loopback through a mocked transport:
+    # no Faustus answers, a llama.cpp server does.
+    return Link(LinkConfig(), client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
 
 
 async def test_narrate_extracts_narration_and_delta(conn, world):
