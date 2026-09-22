@@ -145,3 +145,15 @@ def test_structured_present_has_no_trait_dump(conn, world):
     e = store.create_entity(conn, world["id"], "character", "Iria", fields={f"k{i}": i for i in range(30)})
     ctx = context.world_context(conn, world["id"], scene={"present": [e["ref"]]})
     assert set(ctx["scene"]["present"][0]) == {"ref", "name", "kind", "status", "summary"}
+
+
+def test_no_empty_section_headers_when_the_budget_runs_out(conn, world):
+    for i in range(30):
+        store.create_fact(conn, world["id"], f"hecho número {i} " + "x" * 80, canon=True)
+    store.create_thread(conn, world["id"], "Un hilo")
+    ctx = context.world_context(conn, world["id"], budget_chars=600)
+    lines = ctx["brief"].splitlines()
+    for i, line in enumerate(lines):
+        if line.endswith(":") and line.isupper():
+            assert i + 1 < len(lines) and lines[i + 1].startswith("  "), ctx["brief"]
+    assert ctx["truncated"] is True

@@ -171,12 +171,23 @@ def world_context(
     used = 0
     truncated = False
 
+    pending_header: Optional[str] = None
+
+    def header(title: Optional[str]) -> None:
+        """Start a section: its title is written only together with its
+        first line, so no empty "THREADS:" is left when nothing fits."""
+        nonlocal pending_header
+        pending_header = title
+
     def add(line: str, required: bool = False) -> bool:
-        nonlocal used, truncated
-        cost = len(line) + 1
+        nonlocal used, truncated, pending_header
+        cost = len(line) + 1 + (len(pending_header) + 1 if pending_header else 0)
         if not required and used + cost > budget_chars:
             truncated = True
             return False
+        if pending_header:
+            lines.append(pending_header)
+            pending_header = None
         lines.append(line)
         used += cost
         return True
@@ -195,7 +206,7 @@ def world_context(
     if location:
         add(f"LOCATION [{location['ref']}]: {location['name']} — {_truncate(location.get('summary', ''), 120)}")
     if present_briefs:
-        add("PRESENT:")
+        header("PRESENT:")
         kept_present = []
         for pb in present_briefs:
             traits = ", ".join(f"{k}={v}" for k, v in list(pb["traits"].items())[:4])
@@ -214,12 +225,13 @@ def world_context(
                 break
     else:
         kept_present = []
+    header(None)
     if scene.get("mood"):
         add(f"MOOD: {scene['mood']}")
 
     kept_lore = []
     if lore_ranked:
-        add("LORE:")
+        header("LORE:")
         for f in lore_ranked:
             tag = "canon" if f["canon"] else "fact"
             if add(f"  [{f['ref']}] ({tag}) {_truncate(f['text'], 200)}"):
@@ -229,7 +241,7 @@ def world_context(
 
     kept_threads = []
     if threads_ranked:
-        add("THREADS:")
+        header("THREADS:")
         for t in threads_ranked:
             if add(f"  [{t['ref']}] {t['title']} ({t['status']})"):
                 kept_threads.append(t)
@@ -239,7 +251,7 @@ def world_context(
     kept_clocks = []
     near = [c for c in clocks_ranked if c["segments"] and c["filled"] / c["segments"] >= 0.5]
     if near:
-        add("CLOCKS NEAR FULL:")
+        header("CLOCKS NEAR FULL:")
         for c in near:
             if add(f"  [{c['ref']}] {c['name']}: {c['filled']}/{c['segments']}"):
                 kept_clocks.append(c)
@@ -248,13 +260,14 @@ def world_context(
 
     kept_turns = []
     if recent_turns_all:
-        add("RECENT:")
+        header("RECENT:")
         for t in recent_turns_all[-4:]:
             if add(f"  ({t['role']}/{t['author']}) {_truncate(t['text'], 140)}"):
                 kept_turns.append(t)
             else:
                 break
 
+    header(None)
     brief = "\n".join(lines)
 
     return {
