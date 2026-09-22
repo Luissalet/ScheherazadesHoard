@@ -14,6 +14,11 @@ Grammar (case-insensitive, whitespace ignored)::
     adv_term    := ('adv' | 'dis') '(' 'd' INT ')'
 
 Examples: ``2d6+3``, ``4d6kh3``, ``1d20!``, ``adv(d20)+5``, ``4dF``.
+
+Bounds (an agent or a pasted string must not be able to make the app roll
+a million dice or overflow SQLite's 64-bit integers): at most 100
+characters, 20 terms, 200 dice asked for, 1000 dice rolled including
+explosions, constants up to 10000, 100 dice and 1000 sides per term.
 """
 from __future__ import annotations
 
@@ -26,6 +31,11 @@ from typing import Optional, Union
 MAX_DICE_PER_TERM = 100
 MAX_SIDES = 1000
 MAX_EXPLOSIONS = 100  # safety cap on a single die's explosion chain
+MAX_EXPRESSION_CHARS = 100
+MAX_TERMS = 20
+MAX_CONSTANT = 10_000
+MAX_TOTAL_DICE = 200  # dice asked for across all terms, before explosions
+MAX_ROLLED_DICE = 1000  # dice actually rolled, explosions included
 
 
 class DiceError(ValueError):
@@ -157,7 +167,10 @@ def _apply_keepdrop(logical_values: list[int], keepdrop: Optional[tuple[str, int
 
 def _term_value(term_str: str, rng: Random) -> tuple[int, list[Die]]:
     if _INT_RE.match(term_str):
-        return int(term_str), []
+        value = int(term_str)
+        if value > MAX_CONSTANT:
+            raise DiceError(f"constant out of bounds (0-{MAX_CONSTANT}): {term_str!r}")
+        return value, []
 
     m = _ADV_RE.match(term_str)
     if m:
@@ -216,9 +229,22 @@ def roll(expression: str, seed: Optional[int] = None) -> DiceResult:
     """Roll a dice expression. Raises DiceError on malformed/out-of-bounds input."""
     if not isinstance(expression, str) or not expression.strip():
         raise DiceError("expression must be a non-empty string")
+    if len(expression) > MAX_EXPRESSION_CHARS:
+        raise DiceError(f"expression too long (max {MAX_EXPRESSION_CHARS} characters)")
     rng: Random = Random(seed) if seed is not None else secrets.SystemRandom()
 
     chunks = _split_terms(expression)
+    if len(chunks) > MAX_TERMS:
+        raise DiceError(f"too many terms (max {MAX_TERMS})")
+    asked = 0
+    for chunk in chunks:
+        m = _DICE_RE.match(chunk.lstrip("+-").strip())
+        if m:
+            asked += int(m.group(1)) if m.group(1) else 1
+        elif _ADV_RE.match(chunk.lstrip("+-").strip()):
+            asked += 2
+    if asked > MAX_TOTAL_DICE:
+        raise DiceError(f"too many dice in one roll: {asked} (max {MAX_TOTAL_DICE})")
     total = 0
     all_dice: list[Die] = []
     parts: list[str] = []
@@ -234,6 +260,8 @@ def roll(expression: str, seed: Optional[int] = None) -> DiceResult:
         value, dice = _term_value(body, rng)
         total += sign * value
         all_dice.extend(dice)
+        if len(all_dice) > MAX_ROLLED_DICE:
+            raise DiceError(f"roll exploded past {MAX_ROLLED_DICE} dice; use fewer exploding dice")
         parts.append(f"{'-' if sign < 0 else '+'}{body}({value})")
 
     detail = " ".join(parts).lstrip("+")
@@ -286,3 +314,25 @@ def move(stat: int, seed: Optional[int] = None) -> dict:
         "band": band,
         "seed": seed,
     }
+
+
+_PBTA_RE = re.compile(r"^2d6([+-]\d+)?$")
+_D20_RE = re.compile(r"^(1?d20|adv\(d20\)|dis\(d20\))([+-]\d+)?$")
+
+
+def interpret(result: DiceResult, ruleset: Optional[str]) -> dict:
+    """What a roll means under the world's ruleset, when that is unambiguous.
+
+    pbta_2d6: a plain ``2d6±N`` gets its band (miss / weak_hit /
+    strong_hit). d20: a single d20 (``d20±N``, ``adv(d20)``, ``dis(d20)``)
+    gets the natural value and a crit flag. Anything else: ``{}``.
+    """
+    expr = re.sub(r"\s+", "", result.expression.lower())
+    if ruleset == "pbta_2d6" and _PBTA_RE.match(expr):
+        return {"band": band_2d6(result.total)}
+    if ruleset == "d20" and _D20_RE.match(expr):
+        kept = [d for d in result.dice if d.kept and d.sides == 20]
+        if len(kept) == 1:
+            natural = kept[0].value
+            return {"natural": natural, "crit": "success" if natural == 20 else ("fail" if natural == 1 else None)}
+    return {}

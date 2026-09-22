@@ -672,13 +672,23 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     @app.post("/api/agent/dice_roll")
     @agent_call("dice_roll")
     async def a_dice_roll(body: DiceRollBody):
+        world = store.get_world(C(), body.world) if body.world else None
         result = dice.roll(body.expression, seed=body.seed)
-        wid = store.resolve_world_id(C(), body.world) if body.world else None
         entry = store.log_dice(
             C(), body.expression, result.total, [d.to_dict() for d in result.dice],
-            seed=body.seed, reason=body.reason, who=body.who, world_id=wid,
+            seed=body.seed, reason=body.reason[:300], who=body.who if body.who in ("agent", "user", "narrator") else "agent",
+            world_id=world["id"] if world else None,
         )
-        return {**result.to_dict(), "log_id": entry["id"]}
+        # The full per-die record lives in the dice log; the caller gets the
+        # values, not a list of objects per die.
+        return {
+            "log_id": entry["id"], "expression": result.expression, "total": result.total,
+            "detail": result.detail,
+            "kept": [d.value for d in result.dice if d.kept],
+            "dropped": [d.value for d in result.dice if not d.kept],
+            "seed": result.seed,
+            **dice.interpret(result, world["ruleset"] if world else None),
+        }
 
     @app.post("/api/agent/table_roll")
     @agent_call("table_roll")

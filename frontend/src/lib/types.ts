@@ -166,10 +166,14 @@ export interface Turn {
 export interface DiceRollResult {
   expression: string;
   total: number;
-  dice: { sides: number | "F"; value: number; kept: boolean; exploded_from: boolean }[];
+  kept: number[];
+  dropped: number[];
   seed: number | null;
   detail: string;
-  log_id?: string;
+  log_id: string;
+  band?: "miss" | "weak_hit" | "strong_hit";
+  natural?: number;
+  crit?: "success" | "fail" | null;
 }
 
 export interface DiceLogEntry {

@@ -410,3 +410,16 @@ def test_story_append_result_is_compact_with_named_scene(world, client):
 def test_story_append_needs_text_or_delta(world, client):
     r = client.post("/api/agent/story_append", json={"world": world["id"], "text": "  "})
     assert r.status_code == 400
+
+
+def test_dice_roll_huge_constant_is_400_not_500(world, client):
+    r = client.post("/api/agent/dice_roll", json={"expression": "99999999999999999999999"})
+    assert r.status_code == 400
+    assert r.json()["error"] == "bad_request"
+
+
+def test_dice_roll_is_compact_and_reads_the_ruleset(world, client):
+    body = client.post("/api/agent/dice_roll", json={"expression": "2d6+1", "world": world["id"], "seed": 101}).json()
+    assert body["total"] == 8 and body["band"] == "weak_hit"
+    assert body["kept"] == [5, 2] and body["dropped"] == []
+    assert "dice" not in body

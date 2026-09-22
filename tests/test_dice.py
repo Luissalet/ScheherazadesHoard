@@ -153,3 +153,27 @@ def test_bounds_are_inclusive():
     dice.roll("100d1", seed=1)  # 100 dice: upper bound, must not raise
     dice.roll("1d1000", seed=1)  # 1000 sides: upper bound, must not raise
     dice.roll("1d1", seed=1)  # 1 side: lower bound, must not raise
+
+
+# --- regressions found in review ------------------------------------------
+
+@pytest.mark.parametrize("bad", [
+    "99999999999999999999999",          # overflowed SQLite INTEGER -> HTTP 500
+    "2d6+" + "1" * 30,
+    "+".join(["100d1000"] * 3),          # 300 dice asked for
+    "+".join(["1d6"] * 21),              # too many terms
+    "1d6" + "+1" * 60,                   # too long
+    "100d1!",                            # explodes past the rolled-dice cap
+])
+def test_resource_bounds(bad):
+    with pytest.raises(dice.DiceError):
+        dice.roll(bad, seed=1)
+
+
+def test_band_and_crit_interpretation():
+    assert dice.interpret(dice.roll("2d6+1", seed=101), "pbta_2d6") == {"band": "weak_hit"}
+    assert dice.interpret(dice.roll("2d6+1", seed=101), "d20") == {}
+    r = dice.roll("adv(d20)+3", seed=5)
+    info = dice.interpret(r, "d20")
+    assert info["natural"] == max(d.value for d in r.dice)
+    assert dice.interpret(dice.roll("3d6", seed=1), "pbta_2d6") == {}
