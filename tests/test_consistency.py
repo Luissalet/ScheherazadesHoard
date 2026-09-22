@@ -131,3 +131,24 @@ async def test_result_says_whether_the_llm_judge_ran(conn, world):
 
     result = await consistency.world_check(conn, world["id"], "El faro brilla", chat_fn=failing)
     assert result["llm_judge"] == "unavailable"
+
+
+async def test_characters_are_recognised_by_a_unique_first_name(conn, world):
+    store.create_entity(conn, world["id"], "character", "Ulla Vessane", status="dead")
+    store.create_entity(conn, world["id"], "character", "Marisol Vega")
+    store.create_entity(conn, world["id"], "character", "Marisol Rojas")  # shares the first name
+    result = await consistency.world_check(conn, world["id"], "Ulla ordena zarpar.")
+    assert result["consistent"] is False
+    result = await consistency.world_check(conn, world["id"], "Marisol ordena zarpar.")
+    assert result["consistent"] is True  # ambiguous first name: not guessed
+
+
+async def test_conflict_reasons_follow_the_world_language(conn):
+    es = store.create_world(conn, "Mundo", language="es")
+    en = store.create_world(conn, "World", language="en")
+    for w in (es, en):
+        store.create_entity(conn, w["id"], "character", "Ulla", status="dead")
+    r_es = await consistency.world_check(conn, es["id"], "Ulla ordena zarpar.")
+    r_en = await consistency.world_check(conn, en["id"], "Ulla orders them to sail.")
+    assert r_es["conflicts"][0]["why"].startswith("Ulla está muerto/a")
+    assert r_en["conflicts"][0]["why"].startswith("Ulla is dead")

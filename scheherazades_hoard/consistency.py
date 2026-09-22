@@ -55,7 +55,22 @@ def _mentions(statement_folded: str, name: str) -> bool:
 
 
 def _mentions_entity(statement_folded: str, e: dict) -> bool:
-    return any(_mentions(statement_folded, n) for n in [e["name"], *(e.get("aliases") or [])])
+    names = [e["name"], *(e.get("aliases") or []), *e.get("_short_names", [])]
+    return any(_mentions(statement_folded, n) for n in names)
+
+
+def _add_short_names(entities: list[dict]) -> None:
+    """Characters are usually called by their first name ("Marisol" for
+    "Marisol Vega"): accept it when no other entity starts with the same
+    word, so the rules do not only fire on full names."""
+    firsts: dict[str, int] = {}
+    for e in entities:
+        first = _fold(e["name"]).split()[0] if e["name"].split() else ""
+        firsts[first] = firsts.get(first, 0) + 1
+    for e in entities:
+        words = e["name"].split()
+        if e["kind"] == "character" and len(words) > 1 and len(words[0]) >= 3 and firsts.get(_fold(words[0])) == 1:
+            e["_short_names"] = [words[0]]
 
 
 # Talking *about* the dead is not the dead acting: a grave, a memory, a
@@ -67,7 +82,34 @@ _DEATH_CONTEXT = re.compile(
 )
 
 
-def _rule_dead_acting(conn, world_id: str, statement: str, entities: list[dict]) -> list[dict]:
+# Rule messages in the world's language (worlds are often played in Spanish).
+_MSG = {
+    "en": {
+        "dead_text": "{name} is {status}",
+        "dead_why": "{name} is {status} and the statement implies they are active",
+        "loc_text": "{name} was last placed at {last}",
+        "loc_why": "the statement places {name} at {here}, but they were last seen at {last}",
+        "rel_why": "the statement implies '{stated}', which contradicts the tracked relation '{tracked}'",
+    },
+    "es": {
+        "dead_text": "{name} está {status}",
+        "dead_why": "{name} está {status} y la afirmación le hace actuar",
+        "loc_text": "{name} estaba por última vez en {last}",
+        "loc_why": "la afirmación sitúa a {name} en {here}, pero se le vio por última vez en {last}",
+        "rel_why": "la afirmación implica «{stated}», que contradice la relación registrada «{tracked}»",
+    },
+}
+_STATUS_ES = {"dead": "muerto/a", "missing": "desaparecido/a", "destroyed": "destruido/a"}
+
+
+def _msg(lang: str, key: str, **kw: str) -> str:
+    table = _MSG.get(lang, _MSG["en"])
+    if lang == "es" and "status" in kw:
+        kw["status"] = _STATUS_ES.get(kw["status"], kw["status"])
+    return table[key].format(**kw)
+
+
+def _rule_dead_acting(conn, world_id: str, statement: str, entities: list[dict], lang: str = "en") -> list[dict]:
     folded = _fold(statement)
     if _DEATH_CONTEXT.search(folded):
         return []
@@ -76,8 +118,8 @@ def _rule_dead_acting(conn, world_id: str, statement: str, entities: list[dict])
         if e["status"] in DEAD_STATUSES and _mentions_entity(folded, e):
             conflicts.append({
                 "fact_id": e["ref"],
-                "text": f"{e['name']} is {e['status']}",
-                "why": f"{e['name']} is {e['status']} and the statement implies they are active",
+                "text": _msg(lang, "dead_text", name=e["name"], status=e["status"]),
+                "why": _msg(lang, "dead_why", name=e["name"], status=e["status"]),
             })
     return conflicts
 
@@ -96,7 +138,7 @@ def _last_known_location(conn, world_id: str, entity_id: str) -> Optional[dict]:
     return None
 
 
-def _rule_location_mismatch(conn, world_id: str, statement: str, entities: list[dict], locations: list[dict]) -> list[dict]:
+def _rule_location_mismatch(conn, world_id: str, statement: str, entities: list[dict], locations: list[dict], lang: str = "en") -> list[dict]:
     folded = _fold(statement)
     conflicts = []
     mentioned_locations = [loc for loc in locations if _mentions_entity(folded, loc)]
@@ -112,13 +154,13 @@ def _rule_location_mismatch(conn, world_id: str, statement: str, entities: list[
             if mentioned["id"] != last_loc["id"]:
                 conflicts.append({
                     "fact_id": last_loc["ref"],
-                    "text": f"{e['name']} was last placed at {last_loc['name']}",
-                    "why": f"the statement places {e['name']} at {mentioned['name']}, but they were last seen at {last_loc['name']}",
+                    "text": _msg(lang, "loc_text", name=e["name"], last=last_loc["name"]),
+                    "why": _msg(lang, "loc_why", name=e["name"], here=mentioned["name"], last=last_loc["name"]),
                 })
     return conflicts
 
 
-def _rule_relation_contradiction(conn, world_id: str, statement: str, entities: list[dict]) -> list[dict]:
+def _rule_relation_contradiction(conn, world_id: str, statement: str, entities: list[dict], lang: str = "en") -> list[dict]:
     folded = _fold(statement)
     conflicts = []
     stated_type = None
@@ -141,7 +183,7 @@ def _rule_relation_contradiction(conn, world_id: str, statement: str, entities: 
             conflicts.append({
                 "fact_id": rel["id"],
                 "text": f"{a['name']} {rel['type']} {b['name']}",
-                "why": f"the statement implies '{stated_type}', which contradicts the tracked relation '{rel['type']}'",
+                "why": _msg(lang, "rel_why", stated=stated_type, tracked=rel["type"]),
             })
     return conflicts
 
@@ -164,12 +206,14 @@ async def world_check(
     judge_limit: int = 6,
 ) -> dict:
     entities = store.list_entities(conn, world_id, limit=500)
+    _add_short_names(entities)
     locations = [e for e in entities if e["kind"] == "location"]
 
     conflicts: list[dict] = []
-    conflicts.extend(_rule_dead_acting(conn, world_id, statement, entities))
-    conflicts.extend(_rule_location_mismatch(conn, world_id, statement, entities, locations))
-    conflicts.extend(_rule_relation_contradiction(conn, world_id, statement, entities))
+    lang = store.get_world(conn, world_id).get("language", "en")
+    conflicts.extend(_rule_dead_acting(conn, world_id, statement, entities, lang))
+    conflicts.extend(_rule_location_mismatch(conn, world_id, statement, entities, locations, lang))
+    conflicts.extend(_rule_relation_contradiction(conn, world_id, statement, entities, lang))
 
     candidates = store.search_facts(conn, world_id, statement, limit=judge_limit)
     judge = "no_candidates" if not candidates else ("not_configured" if chat_fn is None else "unavailable")

@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
-import { Dices, Eye, EyeOff, Image as ImageIcon, Sparkles, Undo2 } from "lucide-react";
+import { Dices, Eye, EyeOff, Image as ImageIcon, ShieldCheck, Sparkles, Undo2 } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
-import type { NarrateResult, Session, Turn, TurnRole, World, WorldContextResult } from "../lib/types";
+import type { NarrateResult, Session, Turn, TurnRole, World, WorldCheckResult, WorldContextResult } from "../lib/types";
 import { Badge, ConfirmButton, ErrorBanner } from "../components/ui";
 
 const QUICK_ROLLS = ["1d20", "2d6", "1d100", "4dF", "1d6"];
@@ -184,6 +184,23 @@ export function PlayPage({ world, lang, onWorldChanged }: { world: World; lang: 
     }
   }
 
+  const [checkText, setCheckText] = useState("");
+  const [check, setCheck] = useState<WorldCheckResult | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  async function runCheck() {
+    if (!checkText.trim()) return;
+    setChecking(true);
+    setError(null);
+    try {
+      setCheck(await api.worldCheck(world.id, checkText));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setChecking(false);
+    }
+  }
+
   async function handleIllustrate() {
     if (!ctx) return;
     setIllustrating(true);
@@ -313,6 +330,34 @@ export function PlayPage({ world, lang, onWorldChanged }: { world: World; lang: 
             <input value={diceExpr} onChange={(e) => setDiceExpr(e.target.value)} />
             <button className="btn btn-sm" onClick={() => rollQuick(diceExpr)}><Dices size={13} /></button>
           </div>
+        </div>
+
+        <div className="card">
+          <div className="panel-title">{t("play_check", lang)}</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input value={checkText} placeholder={t("play_check_placeholder", lang)}
+              onChange={(e) => setCheckText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") runCheck(); }} />
+            <button className="btn btn-sm" disabled={checking || !checkText.trim()} onClick={runCheck}>
+              <ShieldCheck size={13} />
+            </button>
+          </div>
+          {check && (
+            <div style={{ fontSize: 12, marginTop: 8 }}>
+              {check.consistent ? (
+                <Badge kind="accent">{t("play_check_ok", lang)}</Badge>
+              ) : (
+                check.conflicts.map((c) => (
+                  <p key={c.fact_id} style={{ margin: "4px 0" }}>
+                    <Badge kind="danger">{c.fact_id}</Badge> {c.why}
+                  </p>
+                ))
+              )}
+              <p style={{ margin: "6px 0 0", color: "var(--text-muted)" }}>
+                {check.llm_judge === "used" ? t("play_check_judge_used", lang) : t("play_check_judge_off", lang)}
+              </p>
+            </div>
+          )}
         </div>
 
         {ctx && (ctx.threads.length > 0 || ctx.clocks.length > 0) && (

@@ -259,6 +259,8 @@ export interface WorldCheckResult {
   consistent: boolean;
   conflicts: { fact_id: string; text: string; why: string }[];
   checked: string;
+  rules_checked: string[];
+  llm_judge: "used" | "unavailable" | "not_configured" | "no_candidates";
 }
 
 export interface ApiErrorBody {
