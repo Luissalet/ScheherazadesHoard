@@ -228,6 +228,26 @@ class StoryUndoBody(BaseModel):
     world: str
 
 
+def _static_file(root: Path, rel: str) -> Optional[Path]:
+    """Map a URL path onto a file inside `root`, or None.
+
+    The path comes percent-decoded from the router, so `..%2f` segments,
+    a leading `/` (from `//etc/passwd`), backslashes and Windows drive
+    letters (`C:/...`) all arrive here literally; `Path(root) / rel` would
+    happily escape the build folder for any of them. Resolve and require
+    the result to stay under `root`.
+    """
+    if not rel or "\\" in rel or ":" in rel or rel.startswith("/") or "\x00" in rel:
+        return None
+    try:
+        candidate = (root / rel).resolve()
+    except (OSError, ValueError):
+        return None
+    if not candidate.is_relative_to(root) or not candidate.is_file():
+        return None
+    return candidate
+
+
 # ---------------------------------------------------------------------------
 # App factory
 # ---------------------------------------------------------------------------
@@ -708,12 +728,16 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     # -- static frontend ----------------------------------------------------
 
     if static_dir and Path(static_dir).exists():
-        index_file = Path(static_dir) / "index.html"
+        static_root = Path(static_dir).resolve()
+        index_file = static_root / "index.html"
 
         @app.get("/{full_path:path}")
         async def spa(full_path: str):
-            candidate = Path(static_dir) / full_path
-            if full_path and candidate.is_file():
+            if full_path.startswith("api/"):
+                # An unknown API route must not come back as the SPA's HTML.
+                raise HTTPException(404, {"error": "not_found", "message": f"no API route /{full_path}"})
+            candidate = _static_file(static_root, full_path)
+            if candidate is not None:
                 return FileResponse(candidate)
             if index_file.exists():
                 return FileResponse(index_file)
