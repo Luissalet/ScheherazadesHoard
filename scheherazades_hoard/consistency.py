@@ -18,6 +18,7 @@ missed contradiction) are expected and documented as a boundary.
 """
 from __future__ import annotations
 
+import re
 import unicodedata
 from typing import Any, Awaitable, Callable, Optional
 
@@ -46,15 +47,33 @@ def _fold(text: str) -> str:
 
 
 def _mentions(statement_folded: str, name: str) -> bool:
-    name_folded = _fold(name)
-    return bool(name_folded) and name_folded in statement_folded
+    """Whole-word match: "Ana" must not match "ventana", nor "Sal" "salta"."""
+    name_folded = _fold(name).strip()
+    if not name_folded:
+        return False
+    return re.search(rf"(?<!\w){re.escape(name_folded)}(?!\w)", statement_folded) is not None
+
+
+def _mentions_entity(statement_folded: str, e: dict) -> bool:
+    return any(_mentions(statement_folded, n) for n in [e["name"], *(e.get("aliases") or [])])
+
+
+# Talking *about* the dead is not the dead acting: a grave, a memory, a
+# ghost, the body, the news of the death.
+_DEATH_CONTEXT = re.compile(
+    r"(?<!\w)(tumba|entierro|funeral|funerales|cadaver|recuerd\w*|memoria|fantasma|espectro|"
+    r"murio|muerte|difunt\w*|luto|velatorio|grave|burial|corpse|remember\w*|memory|ghost|"
+    r"died|death|mourn\w*)(?!\w)"
+)
 
 
 def _rule_dead_acting(conn, world_id: str, statement: str, entities: list[dict]) -> list[dict]:
     folded = _fold(statement)
+    if _DEATH_CONTEXT.search(folded):
+        return []
     conflicts = []
     for e in entities:
-        if e["status"] in DEAD_STATUSES and _mentions(folded, e["name"]):
+        if e["status"] in DEAD_STATUSES and _mentions_entity(folded, e):
             conflicts.append({
                 "fact_id": e["ref"],
                 "text": f"{e['name']} is {e['status']}",
@@ -66,6 +85,8 @@ def _rule_dead_acting(conn, world_id: str, statement: str, entities: list[dict])
 def _last_known_location(conn, world_id: str, entity_id: str) -> Optional[dict]:
     for sess in reversed(store.list_sessions(conn, world_id)):
         for turn in reversed(store.list_turns(conn, sess["id"])):
+            if turn["undone"]:
+                continue  # an undone turn never happened
             scene = turn.get("scene") or {}
             if entity_id in (scene.get("present") or []) and scene.get("location"):
                 try:
@@ -78,11 +99,11 @@ def _last_known_location(conn, world_id: str, entity_id: str) -> Optional[dict]:
 def _rule_location_mismatch(conn, world_id: str, statement: str, entities: list[dict], locations: list[dict]) -> list[dict]:
     folded = _fold(statement)
     conflicts = []
-    mentioned_locations = [loc for loc in locations if _mentions(folded, loc["name"])]
+    mentioned_locations = [loc for loc in locations if _mentions_entity(folded, loc)]
     if not mentioned_locations:
         return conflicts
     for e in entities:
-        if e["kind"] != "character" or not _mentions(folded, e["name"]):
+        if e["kind"] != "character" or not _mentions_entity(folded, e):
             continue
         last_loc = _last_known_location(conn, world_id, e["id"])
         if not last_loc:
@@ -107,7 +128,7 @@ def _rule_relation_contradiction(conn, world_id: str, statement: str, entities: 
             break
     if not stated_type:
         return conflicts
-    mentioned = [e for e in entities if _mentions(folded, e["name"])]
+    mentioned = [e for e in entities if _mentions_entity(folded, e)]
     if len(mentioned) < 2:
         return conflicts
     relations = store.list_relations(conn, world_id)
@@ -151,11 +172,13 @@ async def world_check(
     conflicts.extend(_rule_relation_contradiction(conn, world_id, statement, entities))
 
     candidates = store.search_facts(conn, world_id, statement, limit=judge_limit)
+    judge = "no_candidates" if not candidates else ("not_configured" if chat_fn is None else "unavailable")
     if chat_fn is not None and candidates:
         facts_block = "\n".join(f"- [{f['ref']}] {f['text']}" for f in candidates)
         prompt = _JUDGE_PROMPT.format(facts=facts_block, statement=statement)
         try:
             raw = await chat_fn(prompt)
+            judge = "used"
         except Exception:
             raw = ""
         parsed = jsonx.extract_json(raw) if raw else None
@@ -173,5 +196,10 @@ async def world_check(
     return {
         "consistent": len(conflicts) == 0,
         "conflicts": conflicts,
-        "checked": statement,
+        "checked": statement[:300],
+        # how far the check went: the rules always run; the LLM judge is
+        # "used", "unavailable" (no model resolved), or skipped because no
+        # established fact matched the statement ("no_candidates").
+        "rules_checked": ["dead_acting", "location_mismatch", "relation_contradiction"],
+        "llm_judge": judge,
     }

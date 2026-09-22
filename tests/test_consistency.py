@@ -85,3 +85,49 @@ async def test_llm_judge_unparseable_output_does_not_crash(conn, world):
 
     result = await consistency.world_check(conn, world["id"], "algo pasa", chat_fn=fake_chat)
     assert result["consistent"] is True
+
+
+# --- regressions found in review ------------------------------------------
+
+async def test_short_names_match_whole_words_only(conn, world):
+    store.create_entity(conn, world["id"], "character", "Ana", status="dead")
+    result = await consistency.world_check(conn, world["id"], "Marisol abre la ventana del faro.")
+    assert result["consistent"] is True
+
+
+async def test_dead_character_found_by_alias(conn, world):
+    store.create_entity(conn, world["id"], "character", "Ulla Vessane", aliases=["la Reina"], status="dead")
+    result = await consistency.world_check(conn, world["id"], "La Reina ordena zarpar.")
+    assert result["consistent"] is False
+    assert result["conflicts"][0]["fact_id"] == "E1"
+
+
+async def test_talking_about_the_dead_is_not_a_conflict(conn, world):
+    store.create_entity(conn, world["id"], "character", "Ulla", status="dead")
+    result = await consistency.world_check(conn, world["id"], "Marisol visita la tumba de Ulla.")
+    assert result["consistent"] is True
+
+
+async def test_undone_turn_does_not_set_last_known_location(conn, world):
+    from scheherazades_hoard import delta
+    port = store.create_entity(conn, world["id"], "location", "Puerto")
+    faro = store.create_entity(conn, world["id"], "location", "Faro")
+    iria = store.create_entity(conn, world["id"], "character", "Iria")
+    sess = store.get_or_create_current_session(conn, world["id"])
+    delta.record_turn(conn, world["id"], sess["id"], {"scene": {"location": port["ref"], "present": [iria["ref"]]}}, "narration", "narrator", text="a")
+    turn, _, _ = delta.record_turn(conn, world["id"], sess["id"], {"scene": {"location": faro["ref"]}}, "narration", "narrator", text="b")
+    delta.undo_last(conn, world["id"], turn)
+    result = await consistency.world_check(conn, world["id"], "Iria espera en el Puerto.")
+    assert result["consistent"] is True
+
+
+async def test_result_says_whether_the_llm_judge_ran(conn, world):
+    store.create_fact(conn, world["id"], "El faro está apagado")
+    result = await consistency.world_check(conn, world["id"], "El faro brilla")
+    assert result["llm_judge"] == "not_configured"
+
+    async def failing(prompt):
+        raise RuntimeError("no model")
+
+    result = await consistency.world_check(conn, world["id"], "El faro brilla", chat_fn=failing)
+    assert result["llm_judge"] == "unavailable"
