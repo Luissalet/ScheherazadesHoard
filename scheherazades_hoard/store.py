@@ -836,6 +836,22 @@ def start_session(conn: sqlite3.Connection, world_id: str, title: str = "") -> d
     return dict(conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone())
 
 
+def insert_session(
+    conn: sqlite3.Connection, world_id: str, title: str, started_at: int,
+    ended_at: Optional[int] = None, commit: bool = True,
+) -> dict:
+    """A session with its original times, for importing a backup. Unlike
+    start_session it does not become the world's current session."""
+    session_id = db.new_id("s_")
+    conn.execute(
+        "INSERT INTO sessions (id, world_id, title, started_at, ended_at) VALUES (?,?,?,?,?)",
+        (session_id, world_id, title, started_at, ended_at),
+    )
+    if commit:
+        conn.commit()
+    return dict(conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone())
+
+
 def rename_session(conn: sqlite3.Connection, world_id: str, session_ref: str, title: str) -> dict:
     """Rename a session (by id or its current title). A blank title is
     rejected — a session must always have something to call it by."""
@@ -917,6 +933,7 @@ def append_turn(
     text: str = "", rolls: Optional[list] = None, scene: Optional[dict] = None,
     delta: Optional[dict] = None, applied: bool = False,
     undo_snapshot: Optional[dict] = None, commit: bool = True,
+    created_at: Optional[int] = None, undone: bool = False,
 ) -> dict:
     validate_turn(role, author)
     row = conn.execute(
@@ -929,11 +946,12 @@ def append_turn(
         """INSERT INTO turns
            (id, world_id, session_id, idx, role, author, text, rolls_json, scene_json,
             delta_json, applied, undone, undo_snapshot_json, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?)""",
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             turn_id, world_id, session_id, idx, role, author, text,
             db.dumps(rolls or []), db.dumps(scene or {}), db.dumps(delta),
-            int(applied), db.dumps(undo_snapshot) if undo_snapshot is not None else None, ts,
+            int(applied), int(undone), db.dumps(undo_snapshot) if undo_snapshot is not None else None,
+            created_at if created_at is not None else ts,
         ),
     )
     if commit:

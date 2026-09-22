@@ -201,4 +201,31 @@ def import_world_json(conn, data: dict[str, Any]) -> dict:
             store.tick_clock(conn, wid, created["id"], c["filled"])
     for t in data.get("tables", []):
         store.create_table(conn, wid, t["name"], t.get("entries", []))
+    _import_sessions(conn, wid, data, id_map)
     return store.get_world(conn, wid)
+
+
+def _import_sessions(conn, world_id: str, data: dict[str, Any], id_map: dict[str, str]) -> None:
+    """Sessions and their turns, in order, with scenes pointing at the new
+    entity ids. Undo snapshots are not carried over (they name rows of the
+    old world), so none of the imported sessions becomes current: the next
+    turn starts a fresh session and undo never reaches an imported turn."""
+    by_session: dict[str, list[dict]] = {}
+    for t in data.get("turns", []):
+        by_session.setdefault(t.get("session_id", ""), []).append(t)
+    for sess in sorted(data.get("sessions", []), key=lambda s: s.get("started_at") or 0):
+        new_sess = store.insert_session(
+            conn, world_id, sess.get("title") or "", sess.get("started_at") or 0, sess.get("ended_at"), commit=False,
+        )
+        for t in sorted(by_session.get(sess["id"], []), key=lambda t: t.get("idx", 0)):
+            scene = dict(t.get("scene") or {})
+            if scene.get("location"):
+                scene["location"] = id_map.get(scene["location"])
+            if "present" in scene:
+                scene["present"] = [id_map[i] for i in scene.get("present") or [] if i in id_map]
+            store.append_turn(
+                conn, world_id, new_sess["id"], t["role"], t["author"], text=t.get("text", ""),
+                rolls=t.get("rolls"), scene=scene, delta=t.get("delta"), applied=bool(t.get("applied")),
+                created_at=t.get("created_at"), undone=bool(t.get("undone")), commit=False,
+            )
+    conn.commit()

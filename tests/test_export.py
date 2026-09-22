@@ -147,6 +147,32 @@ def test_json_export_import_roundtrip(conn, world):
     assert len(store.list_tables(conn, imported["id"])) == 1
 
 
+def test_json_backup_keeps_the_sessions_and_their_story(conn, world):
+    # A backup that re-imported the world but not the play history lost
+    # every night of play (found in the second walkthrough of UC7).
+    iria = store.create_entity(conn, world["id"], "character", "Iria")
+    hospicio = store.create_entity(conn, world["id"], "location", "Hospicio")
+    s1 = store.start_session(conn, world["id"], "La primera noche")
+    store.append_turn(conn, world["id"], s1["id"], "narration", "narrator", text="La niebla sube.",
+                      scene={"location": hospicio["id"], "present": [iria["id"]], "mood": "tenso"})
+    gone = store.append_turn(conn, world["id"], s1["id"], "narration", "narrator", text="Iria muere.")
+    store.mark_turn_undone(conn, gone["id"])
+
+    imported = export.import_world_json(conn, export.export_world_json(conn, world["id"]))
+
+    sessions = store.list_sessions(conn, imported["id"])
+    assert [s["title"] for s in sessions] == ["La primera noche"]
+    turns = store.list_turns(conn, sessions[0]["id"])
+    assert [t["text"] for t in turns] == ["La niebla sube.", "Iria muere."]
+    assert turns[1]["undone"] is True
+    new_iria = store.get_entity(conn, imported["id"], "Iria")
+    assert store.current_scene(conn, imported["id"])["present"] == [new_iria["id"]]
+    md = export.session_to_markdown(conn, imported["id"], sessions[0]["id"])
+    assert "La niebla sube." in md and "Iria muere." not in md
+    # nothing imported is current, so undo can never reach an imported turn
+    assert store.get_current_session(conn, imported["id"]) is None
+
+
 def test_import_rejects_wrong_format(conn):
     with pytest.raises(ValueError):
         export.import_world_json(conn, {"format": "something-else"})
