@@ -40,6 +40,7 @@ const dict = {
   save: { es: "Guardar", en: "Save" },
 
   play_input_placeholder: { es: "¿Qué haces?", en: "What do you do?" },
+  play_mode_narration: { es: "Narración", en: "Narration" },
   play_mode_action: { es: "Acción", en: "Action" },
   play_mode_dialogue: { es: "Diálogo", en: "Dialogue" },
   play_mode_ooc: { es: "Fuera de personaje", en: "Out of character" },

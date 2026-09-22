@@ -8,6 +8,12 @@ import { Badge, ConfirmButton, ErrorBanner } from "../components/ui";
 
 const QUICK_ROLLS = ["1d20", "2d6", "1d100", "4dF", "1d6"];
 
+// Only the four roles a person types themselves have a mode tab — "roll"
+// and "system" turns are written by the app, never chosen from here.
+const MODE_LABEL_KEY: Record<"narration" | "action" | "dialogue" | "ooc", "play_mode_narration" | "play_mode_action" | "play_mode_dialogue" | "play_mode_ooc"> = {
+  narration: "play_mode_narration", action: "play_mode_action", dialogue: "play_mode_dialogue", ooc: "play_mode_ooc",
+};
+
 function turnClass(role: TurnRole, undone: boolean): string {
   return `turn turn-${role}${undone ? " turn-undone" : ""}`;
 }
@@ -270,9 +276,9 @@ export function PlayPage({ world, lang, onWorldChanged }: { world: World; lang: 
 
         <div className="play-input-box">
           <div className="mode-tabs">
-            {(["action", "dialogue", "ooc"] as TurnRole[]).map((m) => (
+            {(["narration", "action", "dialogue", "ooc"] as const).map((m) => (
               <button key={m} className={`mode-tab${mode === m ? " active" : ""}`} onClick={() => setMode(m)}>
-                {t(m === "action" ? "play_mode_action" : m === "dialogue" ? "play_mode_dialogue" : "play_mode_ooc", lang)}
+                {t(MODE_LABEL_KEY[m], lang)}
               </button>
             ))}
           </div>
