@@ -198,7 +198,8 @@ def test_story_append_and_undo(world, client):
     assert r.status_code == 200
     body = r.json()
     assert body["rejected"] == []
-    assert len(body["turn"]["delta"]["created_entities"]) == 1
+    assert body["applied"]["created_entities"][0]["name"] == "Nuevo"
+    assert body["turn_id"].startswith("tn_")
 
     r2 = client.get(f"/api/worlds/{world['id']}/entities")
     assert len(r2.json()) == 1
@@ -380,3 +381,32 @@ def test_entity_facts_found_even_behind_many_newer_facts(world, client):
         client.post(f"/api/worlds/{world['id']}/facts", json={"text": f"hecho {i}"})
     e = client.post("/api/agent/entity_get", json={"world": world["id"], "ref": "Ulla"}).json()
     assert [f["text"] for f in e["facts"]] == ["Ulla firmó el pacto"]
+
+
+def test_story_append_with_bad_role_applies_nothing(world, client):
+    client.post(f"/api/worlds/{world['id']}/clocks", json={"name": "Marea", "segments": 4})
+    r = client.post("/api/agent/story_append", json={
+        "world": world["id"], "text": "x", "role": "narrator", "delta": {"clock_ticks": [{"ref": "C1"}]},
+    })
+    assert r.status_code == 400
+    assert "narration" in r.json()["message"]  # the error lists the valid roles
+    assert client.get(f"/api/worlds/{world['id']}/clocks").json()[0]["filled"] == 0
+
+
+def test_story_append_result_is_compact_with_named_scene(world, client):
+    _upsert(client, world, kind="location", name="Puerto Salado")
+    _upsert(client, world, kind="character", name="Iria", secrets="heredera")
+    body = client.post("/api/agent/story_append", json={
+        "world": world["id"], "text": "Llegan al puerto.",
+        "delta": {"scene": {"location": "Puerto Salado", "present": ["Iria"]},
+                  "new_entities": [{"kind": "item", "name": "Ancla", "secrets": "maldita"}]},
+    }).json()
+    assert body["scene"]["location"] == {"ref": "E1", "name": "Puerto Salado"}
+    assert body["scene"]["present"] == [{"ref": "E2", "name": "Iria"}]
+    assert "maldita" not in str(body) and "heredera" not in str(body)
+    assert body["applied"]["created_entities"][0]["ref"] == "E3"
+
+
+def test_story_append_needs_text_or_delta(world, client):
+    r = client.post("/api/agent/story_append", json={"world": world["id"], "text": "  "})
+    assert r.status_code == 400

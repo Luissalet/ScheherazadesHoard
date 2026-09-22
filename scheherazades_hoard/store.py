@@ -761,7 +761,9 @@ def list_tables(conn: sqlite3.Connection, world_id: str) -> list[dict]:
 def start_session(conn: sqlite3.Connection, world_id: str, title: str = "") -> dict:
     session_id = db.new_id("s_")
     ts = db.now()
-    title = title or f"Session {ts:.0f}"
+    if not title:
+        n = conn.execute("SELECT COUNT(*) AS n FROM sessions WHERE world_id = ?", (world_id,)).fetchone()["n"]
+        title = f"Session {n + 1}"
     conn.execute(
         "INSERT INTO sessions (id, world_id, title, started_at, ended_at) VALUES (?,?,?,?,NULL)",
         (session_id, world_id, title, ts),
@@ -771,13 +773,28 @@ def start_session(conn: sqlite3.Connection, world_id: str, title: str = "") -> d
     return dict(conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone())
 
 
-def get_or_create_current_session(conn: sqlite3.Connection, world_id: str) -> dict:
+def get_current_session(conn: sqlite3.Connection, world_id: str) -> Optional[dict]:
+    """The world's current session, or None (never creates one — safe for reads)."""
     world = conn.execute("SELECT current_session_id FROM worlds WHERE id = ?", (world_id,)).fetchone()
     if world and world["current_session_id"]:
         row = conn.execute("SELECT * FROM sessions WHERE id = ?", (world["current_session_id"],)).fetchone()
         if row:
             return dict(row)
-    return start_session(conn, world_id)
+    return None
+
+
+def get_or_create_current_session(conn: sqlite3.Connection, world_id: str) -> dict:
+    return get_current_session(conn, world_id) or start_session(conn, world_id)
+
+
+def current_scene(conn: sqlite3.Connection, world_id: str) -> dict:
+    """The scene of the world's latest live (not undone) turn that has one."""
+    row = conn.execute(
+        "SELECT scene_json FROM turns WHERE world_id = ? AND undone = 0"
+        " AND scene_json NOT IN ('{}', 'null', '') ORDER BY created_at DESC, idx DESC LIMIT 1",
+        (world_id,),
+    ).fetchone()
+    return db.loads(row["scene_json"], {}) if row else {}
 
 
 def list_sessions(conn: sqlite3.Connection, world_id: str) -> list[dict]:
@@ -802,6 +819,13 @@ VALID_ROLES = {"narration", "action", "dialogue", "ooc", "roll", "system"}
 VALID_AUTHORS = {"user", "narrator", "agent"}
 
 
+def validate_turn(role: str, author: str) -> None:
+    if role not in VALID_ROLES:
+        raise ValueError(f"unknown turn role: {role!r}; use one of {', '.join(sorted(VALID_ROLES))}")
+    if author not in VALID_AUTHORS:
+        raise ValueError(f"unknown turn author: {author!r}; use one of {', '.join(sorted(VALID_AUTHORS))}")
+
+
 def _decode_turn(row: dict) -> dict:
     row = dict(row)
     row["rolls"] = db.loads(row.pop("rolls_json"), [])
@@ -819,10 +843,7 @@ def append_turn(
     delta: Optional[dict] = None, applied: bool = False,
     undo_snapshot: Optional[dict] = None, commit: bool = True,
 ) -> dict:
-    if role not in VALID_ROLES:
-        raise ValueError(f"unknown turn role: {role!r}")
-    if author not in VALID_AUTHORS:
-        raise ValueError(f"unknown turn author: {author!r}")
+    validate_turn(role, author)
     row = conn.execute(
         "SELECT COALESCE(MAX(idx), -1) + 1 AS n FROM turns WHERE session_id = ?", (session_id,)
     ).fetchone()

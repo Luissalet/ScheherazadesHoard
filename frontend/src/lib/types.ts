@@ -210,8 +210,13 @@ export interface NarrateResult {
 }
 
 export interface StoryAppendResult {
-  turn: Turn;
-  rejected: { category: string; item: unknown; reason: string }[];
+  turn_id: string;
+  turn_index: number;
+  session_id: string;
+  role: TurnRole;
+  scene: { location: { ref: string; name: string } | null; present: { ref: string; name: string }[]; mood: string };
+  applied: Record<string, unknown>;
+  rejected: { category: string; item: string; reason: string }[];
 }
 
 export interface BackendStatus {

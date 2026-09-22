@@ -203,13 +203,25 @@ def seed_demo_world(conn) -> dict:
     sid = session["id"]
 
     def add(role, author, text, rolls=None, scene=None, delta=None):
-        if delta is not None:
-            valid, _rejected = delta_mod.validate_delta(conn, wid, delta)
-            result, undo = delta_mod.apply_delta(conn, wid, sid, valid)
-            scene_final = result.get("scene") or scene or {}
-            return store.append_turn(conn, wid, sid, role, author, text=text, rolls=rolls or [],
-                                      scene=scene_final, delta=result, applied=True, undo_snapshot=undo)
-        return store.append_turn(conn, wid, sid, role, author, text=text, rolls=rolls or [], scene=scene or {})
+        # The same single-transaction path story_append uses, so the demo's
+        # turns carry normalised scenes and undo snapshots like real ones.
+        d = dict(delta or {})
+        if scene is not None:
+            d["scene"] = scene
+        turn, _result, rejected = delta_mod.record_turn(conn, wid, sid, d, role, author, text=text, rolls=rolls)
+        if rejected:  # the seed data is ours; a rejection is a bug here
+            raise RuntimeError(f"demo delta rejected: {rejected}")
+        return turn
+
+    def logged_move(stat_name: str, seed: int, reason: str) -> dict:
+        """A 2d6+stat move rolled and written to the audited dice log."""
+        stat = marisol["fields"][stat_name]
+        expression = f"2d6+{stat}"
+        result = dice.roll(expression, seed=seed)
+        store.log_dice(conn, expression, result.total, [d.to_dict() for d in result.dice],
+                       seed=seed, reason=reason, who="agent", world_id=wid)
+        return {"expression": expression, "total": result.total, "band": dice.band_2d6(result.total),
+                "rolls": [d.value for d in result.dice], "seed": seed}
 
     scene0 = {"location": puerto["ref"], "present": [marisol["ref"], tomas["ref"]], "mood": "tenso, expectante"}
     add("narration", "narrator",
@@ -219,18 +231,18 @@ def seed_demo_world(conn) -> dict:
         scene=scene0)
     add("dialogue", "user", "«Deberíamos zarpar antes de que suba la marea», le digo a Tomás.")
     add("dialogue", "narrator", "Tomás no levanta la vista de la red. «La marea siempre sube. La pregunta es adónde vamos.»")
-    r1 = dice.move(marisol["fields"]["sagacidad"], seed=101)
-    add("roll", "agent", f"Marisol intenta recordar el rumbo que la Brújula de Hueso señaló anoche (2d6+{marisol['fields']['sagacidad']}).",
-        rolls=[{"expression": "2d6+sagacidad", "total": r1["total"], "band": r1["band"], "rolls": r1["rolls"]}])
+    r1 = logged_move("sagacidad", 101, "Marisol recuerda el rumbo de la Brújula de Hueso")
+    add("roll", "agent", f"Marisol intenta recordar el rumbo que la Brújula de Hueso señaló anoche (2d6+sagacidad = {r1['total']}).",
+        rolls=[r1])
     add("narration", "narrator",
         "Un golpe parcial: recuerda casi todo, salvo un detalle que se le escapa entre la niebla — "
         "la brújula señaló dos veces hacia los Bancos de Hueso esta semana. Eso nunca había pasado.",
         delta={"new_facts": [{"text": "La Brújula de Hueso ha señalado dos veces hacia Los Bancos de Hueso esta semana.",
                                "entity_ids": [brujula["ref"], bancos["ref"]]}]})
     add("action", "user", "Reviso el casco en busca de daños antes de decidir nada.")
-    r2 = dice.check(12, marisol["fields"]["brutalidad"], seed=202)
-    add("roll", "agent", f"Tirada de inspección (1d20+{marisol['fields']['brutalidad']} vs DC 12).",
-        rolls=[{"expression": "1d20+brutalidad", "natural": r2["natural"], "total": r2["total"], "success": r2["success"]}])
+    r2 = logged_move("brutalidad", 201, "Marisol revisa el casco del Argento II")
+    add("roll", "agent", f"Marisol revisa el casco palmo a palmo (2d6+brutalidad = {r2['total']}).",
+        rolls=[r2])
     add("narration", "narrator",
         "El casco aguanta, pero por poco. Tomás señala una vía de agua nueva cerca de la quilla — "
         "nada urgente todavía, pero tampoco algo para ignorar dos semanas más.")

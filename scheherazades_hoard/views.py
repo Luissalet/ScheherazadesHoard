@@ -101,6 +101,23 @@ def applied_summary(result: dict) -> dict:
     return out
 
 
+def scene_view(conn, world_id: str, scene: Optional[dict]) -> dict:
+    """A stored scene (internal ids) as refs and names the model can reuse."""
+    scene = scene or {}
+
+    def named(ref: Optional[str]) -> Optional[dict]:
+        if not ref:
+            return None
+        try:
+            e = store.get_entity(conn, world_id, ref)
+        except store.NotFound:
+            return None
+        return {"ref": e["ref"], "name": e["name"]}
+
+    present = [p for p in (named(r) for r in scene.get("present") or []) if p]
+    return {"location": named(scene.get("location")), "present": present, "mood": scene.get("mood", "")}
+
+
 def rejected_view(item: dict) -> dict:
     text = json.dumps(item.get("item"), ensure_ascii=False, default=str)
     return {"category": item["category"], "reason": item["reason"], "item": clip(text, SUMMARY_CHARS)}

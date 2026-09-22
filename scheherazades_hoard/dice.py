@@ -265,16 +265,20 @@ def check(dc: int, mod: int, seed: Optional[int] = None) -> dict:
     }
 
 
+def band_2d6(total: int) -> str:
+    """2d6 move bands: 6- miss, 7-9 weak hit, 10+ strong hit."""
+    if total >= 10:
+        return "strong_hit"
+    if total >= 7:
+        return "weak_hit"
+    return "miss"
+
+
 def move(stat: int, seed: Optional[int] = None) -> dict:
     """Powered-by-the-Apocalypse 2d6 move: miss / weak hit / strong hit."""
     result = roll("2d6", seed=seed)
     total = result.total + stat
-    if total >= 10:
-        band = "strong_hit"
-    elif total >= 7:
-        band = "weak_hit"
-    else:
-        band = "miss"
+    band = band_2d6(total)
     return {
         "rolls": [d.value for d in result.dice],
         "stat": stat,

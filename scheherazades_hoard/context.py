@@ -58,12 +58,7 @@ def world_context(
     budget_chars = max(200, int(budget_chars))
 
     # --- resolve the current scene -----------------------------------
-    scene = dict(scene or {})
-    if not scene:
-        session = store.get_or_create_current_session(conn, world_id)
-        last_turn = store.get_last_turn(conn, world_id, session["id"])
-        if last_turn and last_turn.get("scene"):
-            scene = last_turn["scene"]
+    scene = dict(scene or {}) or store.current_scene(conn, world_id)
 
     location = None
     loc_ref = scene.get("location")
@@ -160,8 +155,9 @@ def world_context(
     )
 
     # --- recent turns ------------------------------------------------------
-    session = store.get_or_create_current_session(conn, world_id)
-    recent_turns_all = store.list_turns(conn, session["id"], limit=6)
+    # read-only: never create a session just to look at it
+    session = store.get_current_session(conn, world_id)
+    recent_turns_all = store.list_turns(conn, session["id"], limit=12) if session else []
     recent_turns_all = [t for t in recent_turns_all if not t["undone"]]
 
     # --- assemble within budget, most important first ---------------------

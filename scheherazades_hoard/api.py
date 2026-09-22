@@ -651,15 +651,23 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     @agent_call("story_append")
     async def a_story_append(body: StoryAppendBody):
         wid = store.resolve_world_id(C(), body.world)
+        store.validate_turn(body.role, body.author)  # before anything is written
+        if not body.text.strip() and not body.delta:
+            raise ValueError("nothing to record: pass the turn text, a delta, or both")
+        raw_delta = dict(body.delta or {})
+        if body.scene and "scene" not in raw_delta:
+            raw_delta["scene"] = body.scene
         session = store.get_or_create_current_session(C(), wid)
-        valid, rejected = delta_mod.validate_delta(C(), wid, body.delta or {})
-        result, undo = delta_mod.apply_delta(C(), wid, session["id"], valid)
-        scene = result.get("scene") or body.scene or {}
-        turn = store.append_turn(
-            C(), wid, session["id"], body.role, body.author, text=body.text,
-            rolls=body.rolls or [], scene=scene, delta=result, applied=True, undo_snapshot=undo,
+        turn, result, rejected = delta_mod.record_turn(
+            C(), wid, session["id"], raw_delta, body.role, body.author,
+            text=body.text, rolls=body.rolls or [],
         )
-        return {"turn": turn, "rejected": rejected}
+        return {
+            "turn_id": turn["id"], "turn_index": turn["idx"], "session_id": session["id"],
+            "role": turn["role"], "scene": views.scene_view(C(), wid, turn["scene"]),
+            "applied": views.applied_summary(result),
+            "rejected": [views.rejected_view(r) for r in rejected],
+        }
 
     @app.post("/api/agent/dice_roll")
     @agent_call("dice_roll")
