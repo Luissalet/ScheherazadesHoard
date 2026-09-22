@@ -18,6 +18,8 @@ from typing import Any, Optional
 from . import store
 
 DEFAULT_BUDGET = 3000
+MIN_BUDGET = 200
+MAX_BUDGET = 20000
 
 
 def _fold(text: str) -> str:
@@ -31,7 +33,10 @@ def _truncate(text: str, n: int) -> str:
     return text if len(text) <= n else text[: n - 1].rstrip() + "…"
 
 
-def _score_fact(fact: dict, present_ids: set[str], query_terms: list[str], rank_index: int, total: int) -> float:
+ACTIVE_THREAD_STATUSES = ("open", "advanced")
+
+
+def _score_fact(fact: dict, present_ids: set[str], query_terms: list[str], min_seq: int, max_seq: int) -> float:
     score = 0.0
     if fact.get("canon"):
         score += 2.0
@@ -41,8 +46,8 @@ def _score_fact(fact: dict, present_ids: set[str], query_terms: list[str], rank_
     score += sum(1.0 for t in query_terms if t and t in text_folded)
     # mild recency boost: later facts (higher seq) score slightly higher,
     # normalised so it never dominates canon/mention/match signals.
-    if total > 1:
-        score += 0.5 * (rank_index / (total - 1))
+    if max_seq > min_seq:
+        score += 0.5 * ((fact["seq"] - min_seq) / (max_seq - min_seq))
     return score
 
 
@@ -55,7 +60,7 @@ def world_context(
     budget_chars: int = DEFAULT_BUDGET,
 ) -> dict:
     world = store.get_world(conn, world_id)
-    budget_chars = max(200, int(budget_chars))
+    budget_chars = max(MIN_BUDGET, min(MAX_BUDGET, int(budget_chars)))
 
     # --- resolve the current scene -----------------------------------
     scene = dict(scene or {}) or store.current_scene(conn, world_id)
@@ -128,16 +133,17 @@ def world_context(
             candidate_facts[f["id"]] = f
 
     facts_list = list(candidate_facts.values())
-    total = len(facts_list)
-    scored = sorted(
-        enumerate(facts_list),
-        key=lambda pair: _score_fact(pair[1], focus_ids, query_terms, pair[0], total),
-        reverse=True,
+    seqs = [f["seq"] for f in facts_list] or [0]
+    lo, hi = min(seqs), max(seqs)
+    # score first, then newest seq as the deterministic tie-break
+    lore_ranked = sorted(
+        facts_list,
+        key=lambda f: (-_score_fact(f, focus_ids, query_terms, lo, hi), -f["seq"]),
     )
-    lore_ranked = [f for _, f in scored]
 
     # --- threads touching present entities ------------------------------
-    open_threads = store.list_threads(conn, world_id, status="open")
+    # "advanced" is still a live thread: it must stay in the brief.
+    open_threads = [t for t in store.list_threads(conn, world_id) if t["status"] in ACTIVE_THREAD_STATUSES]
     if present_entities:
         names = [_fold(e["name"]) for e in present_entities]
         touching = [
@@ -175,12 +181,16 @@ def world_context(
         used += cost
         return True
 
-    add(f"WORLD: {world['name']} ({world['genre']}, tone: {world['tone']})", required=True)
-    if world["premise"]:
-        add(_truncate(f"PREMISE: {world['premise']}", 300), required=True)
+    # The header and the content boundaries are never dropped, but they are
+    # clipped so that together they fit in a third of the budget: a tiny
+    # budget still gets a brief that respects `budget_chars`.
+    head_budget = budget_chars // 3
+    add(_truncate(f"WORLD: {world['name']} ({world['genre']}, tone: {world['tone']})", max(40, head_budget // 3)), required=True)
     boundaries = world["content_lines"] + [f"veil: {v}" for v in world["content_veils"]]
     if boundaries:
-        add("BOUNDARIES: " + "; ".join(boundaries[:6]))
+        add(_truncate("BOUNDARIES: " + "; ".join(boundaries[:6]), max(40, head_budget // 3)), required=True)
+    if world["premise"]:
+        add(_truncate(f"PREMISE: {world['premise']}", min(300, max(40, head_budget - used))), required=True)
 
     if location:
         add(f"LOCATION [{location['ref']}]: {location['name']} — {_truncate(location.get('summary', ''), 120)}")
@@ -252,11 +262,14 @@ def world_context(
         "brief": brief,
         "scene": {
             "location": {"ref": location["ref"], "name": location["name"]} if location else None,
-            "present": kept_present,
+            "present": [
+                {k: pb[k] for k in ("ref", "name", "kind", "status", "summary", "secrets") if k in pb}
+                for pb in kept_present
+            ],
             "mood": scene.get("mood", ""),
         },
         "lore": [
-            {"ref": f["ref"], "canon": f["canon"], "text": f["text"]} for f in kept_lore
+            {"ref": f["ref"], "canon": f["canon"], "text": _truncate(f["text"], 200)} for f in kept_lore
         ],
         "threads": [
             {"ref": t["ref"], "title": t["title"], "status": t["status"]} for t in kept_threads

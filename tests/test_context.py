@@ -106,3 +106,42 @@ def test_no_scene_falls_back_gracefully(conn, world):
     ctx = context.world_context(conn, world["id"])
     assert ctx["scene"]["present"] == []
     assert "WORLD:" in ctx["brief"]
+
+
+# --- regressions found in review ------------------------------------------
+
+def test_advanced_threads_stay_in_the_brief(conn, world):
+    th = store.create_thread(conn, world["id"], "La fiebre de Tomás")
+    store.update_thread(conn, world["id"], th["ref"], status="advanced")
+    store.create_thread(conn, world["id"], "Resuelto", status="resolved")
+    ctx = context.world_context(conn, world["id"])
+    assert [t["title"] for t in ctx["threads"]] == ["La fiebre de Tomás"]
+    assert "(advanced)" in ctx["brief"]
+
+
+def test_newer_fact_wins_a_tie(conn, world):
+    e = store.create_entity(conn, world["id"], "character", "Iria")
+    store.create_fact(conn, world["id"], "Iria viste de gris", entity_ids=[e["id"]])
+    store.create_fact(conn, world["id"], "Iria viste de rojo", entity_ids=[e["id"]])
+    ctx = context.world_context(conn, world["id"], scene={"present": [e["ref"]]})
+    assert ctx["lore"][0]["text"] == "Iria viste de rojo"
+
+
+def test_tiny_budget_is_respected_even_with_a_long_premise(conn):
+    w = store.create_world(conn, "Mundo con un nombre bastante largo", premise="p " * 400,
+                           content_lines=["linea " * 30], content_veils=["velo " * 30])
+    ctx = context.world_context(conn, w["id"], budget_chars=200)
+    assert len(ctx["brief"]) <= 200
+    assert ctx["used_chars"] <= 200
+    assert "BOUNDARIES" in ctx["brief"]  # safety lines are clipped, never dropped
+
+
+def test_world_context_is_read_only(conn, world):
+    context.world_context(conn, world["id"])
+    assert store.list_sessions(conn, world["id"]) == []
+
+
+def test_structured_present_has_no_trait_dump(conn, world):
+    e = store.create_entity(conn, world["id"], "character", "Iria", fields={f"k{i}": i for i in range(30)})
+    ctx = context.world_context(conn, world["id"], scene={"present": [e["ref"]]})
+    assert set(ctx["scene"]["present"][0]) == {"ref", "name", "kind", "status", "summary"}
