@@ -307,3 +307,13 @@ def test_rename_onto_another_entity_is_rejected(conn, world):
     b = store.create_entity(conn, world["id"], "character", "Tomás")
     valid, rejected = delta.validate_delta(conn, world["id"], {"entity_updates": [{"ref": b["ref"], "name": "iria"}]})
     assert valid["entity_updates"] == [] and "already used" in rejected[0]["reason"]
+
+
+def test_scene_present_accepts_a_first_name(conn, world, session):
+    iria = store.create_entity(conn, world["id"], "character", "Iria Castro")
+    mateo = store.create_entity(conn, world["id"], "character", "Mateo Lür", status="dead")
+    delta.record_turn(conn, world["id"], session["id"], {"scene": {"present": ["iria", "Mateo"]}}, "narration", "agent")
+    assert store.current_scene(conn, world["id"])["present"] == [iria["id"]]
+    _, rejected = delta.validate_delta(conn, world["id"], {"scene": {"present": ["Mateo"]}})
+    assert "dead" in rejected[0]["reason"] or "muert" in rejected[0]["reason"]
+    assert mateo["id"]

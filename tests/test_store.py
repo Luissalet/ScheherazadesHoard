@@ -167,3 +167,33 @@ def test_list_worlds_includes_counts(conn, world):
     store.create_entity(conn, world["id"], "character", "Ana")
     worlds = store.list_worlds(conn)
     assert worlds[0]["counts"]["entities"] == 1
+
+
+def test_first_name_resolves_when_it_fits_one_entity(conn, world):
+    # Usability report #9: a model says "Nuño", the world knows "Nuño Vidal".
+    nuno = store.create_entity(conn, world["id"], "character", "Nuño Vidal")
+    riera = store.create_entity(conn, world["id"], "character", "Comisario Riera")
+    assert store.resolve_entity_id(conn, world["id"], "Nuño") == nuno["id"]
+    assert store.resolve_entity_id(conn, world["id"], "nuno") == nuno["id"]
+    assert store.resolve_entity_id(conn, world["id"], "Riera") == riera["id"]
+
+
+def test_ambiguous_first_name_error_names_the_candidates(conn, world):
+    store.create_entity(conn, world["id"], "character", "Iria Castro")
+    store.create_entity(conn, world["id"], "character", "Iria Soler")
+    with pytest.raises(store.NotFound) as err:
+        store.resolve_entity_id(conn, world["id"], "Iria")
+    assert "Iria Castro (E1)" in str(err.value) and "Iria Soler (E2)" in str(err.value)
+
+
+def test_part_of_a_word_does_not_resolve(conn, world):
+    store.create_entity(conn, world["id"], "character", "Mateo Lür")
+    with pytest.raises(store.NotFound):
+        store.resolve_entity_id(conn, world["id"], "Mat")
+
+
+def test_upsert_by_first_name_creates_a_new_entity_instead_of_merging(conn, world):
+    castro = store.create_entity(conn, world["id"], "character", "Iria Castro")
+    iria = store.upsert_entity(conn, world["id"], "character", "Iria", summary="otra")
+    assert iria["id"] != castro["id"]
+    assert store.get_entity(conn, world["id"], castro["id"])["summary"] == ""

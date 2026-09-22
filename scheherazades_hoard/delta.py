@@ -59,7 +59,7 @@ def _existing_entity(conn: sqlite3.Connection, world_id: str, names: list[str]) 
     for n in names:
         if isinstance(n, str) and n.strip():
             try:
-                return store.get_entity(conn, world_id, n)
+                return store.get_entity(conn, world_id, n, loose=False)
             except store.NotFound:
                 continue
     return None

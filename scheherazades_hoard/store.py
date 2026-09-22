@@ -6,6 +6,7 @@ and the MCP adapter share one source of truth. No FastAPI imports here.
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 import unicodedata
 from typing import Any, Optional
@@ -261,8 +262,19 @@ def create_entity(
     return e
 
 
-def resolve_entity_id(conn: sqlite3.Connection, world_id: str, ref: str) -> str:
-    """Resolve an entity by internal id, short ref (E12), or name/alias."""
+def _words_of(text: str) -> list[str]:
+    return re.findall(r"\w+", _norm(text))
+
+
+def resolve_entity_id(conn: sqlite3.Connection, world_id: str, ref: str, loose: bool = True) -> str:
+    """Resolve an entity by internal id, short ref (E12), or name/alias.
+
+    With `loose` (the default for lookups), a ref that names no entity
+    exactly may still be part of exactly one name or alias as whole words:
+    "Nuño" finds "Nuño Vidal", "Riera" finds "comisario Riera". When it
+    fits several, the error lists them so the caller can pick an id.
+    Writes that must not merge two people (upsert by name, duplicate
+    checks) pass `loose=False`."""
     row = conn.execute(
         "SELECT id FROM entities WHERE world_id = ? AND id = ?", (world_id, ref)
     ).fetchone()
@@ -284,11 +296,28 @@ def resolve_entity_id(conn: sqlite3.Connection, world_id: str, ref: str) -> str:
         for alias in db.loads(r["aliases_json"], []):
             if _norm(alias) == norm:
                 return r["id"]
+    wanted = _words_of(ref)
+    if loose and wanted:
+        n = len(wanted)
+        hits: list[tuple[str, str, int]] = []
+        for r in conn.execute(
+            "SELECT id, seq, name, aliases_json FROM entities WHERE world_id = ? ORDER BY seq", (world_id,)
+        ):
+            for label in (r["name"], *db.loads(r["aliases_json"], [])):
+                words = _words_of(label)
+                if any(words[i:i + n] == wanted for i in range(len(words) - n + 1)):
+                    hits.append((r["id"], r["name"], r["seq"]))
+                    break
+        if len(hits) == 1:
+            return hits[0][0]
+        if hits:
+            options = ", ".join(f"{name} (E{seq})" for _, name, seq in hits[:6])
+            raise NotFound(f"no entity is exactly {ref!r}; it could be {options}: use the id")
     raise NotFound(f"no entity matches {ref!r}")
 
 
-def get_entity(conn: sqlite3.Connection, world_id: str, ref: str) -> dict:
-    entity_id = resolve_entity_id(conn, world_id, ref)
+def get_entity(conn: sqlite3.Connection, world_id: str, ref: str, loose: bool = True) -> dict:
+    entity_id = resolve_entity_id(conn, world_id, ref, loose=loose)
     row = conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
     return _decode_entity(dict(row))
 
@@ -329,7 +358,7 @@ def upsert_entity(
     validate_kind(kind)
     patch = {k: v for k, v in fields_kw.items() if v is not None}
     try:
-        existing = get_entity(conn, world_id, name)
+        existing = get_entity(conn, world_id, name, loose=False)
     except NotFound:
         return create_entity(conn, world_id, kind, name, **patch)
     if existing["kind"] != kind:
