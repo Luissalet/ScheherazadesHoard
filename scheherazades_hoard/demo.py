@@ -1,7 +1,6 @@
 """Seed data for `--demo`: an original setting, "El Archipiélago de Sal"
-(The Salt Archipelago) — invented names, no real people or franchises, as
-required by the spec. Deterministic (seeded dice) so screenshots and manual
-runs are reproducible.
+(The Salt Archipelago) — invented names, no real people or franchises.
+Deterministic (seeded dice) so screenshots and manual runs are reproducible.
 
 Idempotent: if a world with this name already exists, seeding is skipped.
 """

@@ -5,8 +5,8 @@ commas, use curly "smart" quotes instead of straight ones, add `//` or
 `/* */` comments, nest the payload under an extra key such as `"delta"`,
 or simply get cut off mid-object at the token limit. This module tries
 progressively more forgiving strategies and never raises — callers get
-`None` on total failure and can fall back gracefully (spec: "on failure
-keep the narration and mark the delta `unparsed`").
+`None` on total failure and can fall back gracefully (the narrator then
+keeps the narration and marks the delta `unparsed`).
 """
 from __future__ import annotations
 

@@ -2,8 +2,8 @@
 
 No I/O, no imports from the rest of the package. Deterministic when given a
 seed (`random.Random(seed)`), cryptographically random otherwise
-(`secrets.SystemRandom`), as required by the spec so results can be
-reproduced for debugging but are not predictable by default.
+(`secrets.SystemRandom`), so results can be reproduced for debugging but
+are not predictable by default.
 
 Grammar (case-insensitive, whitespace ignored)::
 

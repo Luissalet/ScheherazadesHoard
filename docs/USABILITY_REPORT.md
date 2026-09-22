@@ -294,7 +294,7 @@ Both walkthroughs again, on fresh scratch data: the agent one over MCP
 stdio (117 calls, 4.5 s, **66 of 69 checks**, up from 59 of 69 before
 this pass) and the person one in Playwright at 1280x800, 1920x1080 dark
 English and 390x844, with the stand-in model for UC4; every screenshot
-was opened and read. The re-walk found that two step-6 fixes were
+was opened and read. The re-walk found that two first-pass fixes were
 incomplete and a backup lost the play history; those are fixed here,
 each with a regression test (pytest 279 -> 294):
 

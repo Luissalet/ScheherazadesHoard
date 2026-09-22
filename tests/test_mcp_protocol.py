@@ -137,7 +137,7 @@ async def test_full_loop_over_mcp_stdio(live_app_url):
             assert appended.isError is False
             assert json.loads(_text(appended))["rejected"] == []
 
-            # world_context has no `scene` argument (matches the spec's tool
+            # world_context has no `scene` argument (by design of the tool
             # signature) — it falls back to the current session's last
             # recorded scene, which story_append just set.
             ctx = await session.call_tool("world_context", {"world": world_id})
