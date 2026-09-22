@@ -7,7 +7,9 @@
 """
 from __future__ import annotations
 
+import contextvars
 import functools
+import logging
 import threading
 import time
 from pathlib import Path
@@ -26,6 +28,14 @@ DISPLAY_NAME = "Scheherazade's Hoard"
 DEFAULT_PORT = 8816
 
 _db_lock = threading.Lock()
+log = logging.getLogger("scheherazades_hoard")
+
+# Who is calling /api/agent/*: the app's own UI marks its requests with
+# `X-Hoard-Client: ui`; everything else (the MCP adapter, any agent) is
+# "agent". Only agent calls go into the "What the assistant did" audit,
+# so the human's own clicks never show up as the model's actions.
+UI_CLIENT_HEADER = "x-hoard-client"
+_caller: contextvars.ContextVar[str] = contextvars.ContextVar("caller", default="agent")
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +303,7 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
                     {"error": "forbidden_cross_site", "message": "cross-site request rejected"},
                     status_code=403,
                 )
+        _caller.set("ui" if request.headers.get(UI_CLIENT_HEADER) == "ui" else "agent")
         return await call_next(request)
 
     def C() -> Any:
@@ -346,17 +357,23 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
         def decorator(fn):
             @functools.wraps(fn)
             async def wrapper(*args, **kwargs):
+                if _caller.get() == "ui":
+                    return await fn(*args, **kwargs)
                 start = time.monotonic()
                 body = kwargs.get("body", args[0] if args else None)
-                args_summary = body.model_dump_json() if isinstance(body, BaseModel) else str(body)
+                args_summary = body.model_dump_json(exclude_none=True) if isinstance(body, BaseModel) else str(body)
                 try:
                     result = await fn(*args, **kwargs)
                 except Exception as e:
+                    ms = (time.monotonic() - start) * 1000
                     with _db_lock:
-                        store.log_agent_call(C(), tool_name, args_summary, (time.monotonic() - start) * 1000, False, str(e)[:300])
+                        store.log_agent_call(C(), tool_name, args_summary, ms, False, str(e)[:300])
+                    log.info("agent %s failed in %.0f ms: %s", tool_name, ms, type(e).__name__)
                     raise
+                ms = (time.monotonic() - start) * 1000
                 with _db_lock:
-                    store.log_agent_call(C(), tool_name, args_summary, (time.monotonic() - start) * 1000, True)
+                    store.log_agent_call(C(), tool_name, args_summary, ms, True)
+                log.info("agent %s ok in %.0f ms", tool_name, ms)
                 return result
             return wrapper
         return decorator

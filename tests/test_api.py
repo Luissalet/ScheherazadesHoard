@@ -437,3 +437,25 @@ def test_validation_errors_use_the_error_shape(world, client):
 def test_bad_table_entries_are_400(world, client, entries):
     r = client.post(f"/api/worlds/{world['id']}/tables", json={"name": "T", "entries": entries})
     assert r.status_code in (400,)
+
+
+def test_ui_calls_stay_out_of_the_assistant_audit(world, client):
+    client.post("/api/agent/dice_roll", json={"expression": "1d6"}, headers={"X-Hoard-Client": "ui"})
+    client.post("/api/agent/dice_roll", json={"expression": "1d8"})
+    calls = client.get("/api/agent_calls").json()
+    rolls = [c for c in calls if c["tool"] == "dice_roll"]
+    assert len(rolls) == 1 and "1d8" in rolls[0]["args_summary"]
+
+
+def test_setup_logging_writes_a_rotating_utf8_log(tmp_path):
+    import logging
+    from scheherazades_hoard.__main__ import setup_logging
+    handler = setup_logging(tmp_path)
+    try:
+        logging.getLogger("scheherazades_hoard").info("arranque ñ")
+        handler.flush()
+        assert "arranque ñ" in (tmp_path / "logs" / "app.log").read_text(encoding="utf-8")
+    finally:
+        for name in ("scheherazades_hoard", "uvicorn.error"):
+            logging.getLogger(name).removeHandler(handler)
+        handler.close()
