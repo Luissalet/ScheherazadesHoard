@@ -217,8 +217,9 @@ def validate_delta(conn: sqlite3.Connection, world_id: str, delta: dict) -> tupl
         if location_ref and not location_ok:
             rejected.append(_reject("scene", scene, f"unknown or non-location: {location_ref!r}"))
         else:
+            present_raw = scene.get("present") or []
             present_ok: list[str] = []
-            for ref in scene.get("present") or []:
+            for ref in present_raw:
                 if not isinstance(ref, str):
                     rejected.append(_reject("scene.present", ref, "present entries must be entity refs or names"))
                     continue
@@ -238,7 +239,14 @@ def validate_delta(conn: sqlite3.Connection, world_id: str, delta: dict) -> tupl
             # changes the mood must not empty the location or the cast.
             valid["scene"] = {k: v for k, v in scene.items() if k in ("location", "present", "mood")}
             if "present" in scene:
-                valid["scene"]["present"] = present_ok
+                if present_raw and not present_ok:
+                    # Every name given was rejected (unknown, dead, ...): treat
+                    # this as no change to `present` rather than as an explicit
+                    # "nobody is here" — one bad name must not empty a scene
+                    # whose existing cast was never actually mentioned.
+                    valid["scene"].pop("present", None)
+                else:
+                    valid["scene"]["present"] = present_ok
 
     return valid, rejected
 

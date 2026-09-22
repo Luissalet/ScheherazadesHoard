@@ -32,8 +32,31 @@ def test_unknown_entity_update_is_rejected(conn, world):
 def test_dead_character_cannot_be_present(conn, world):
     ghost = store.create_entity(conn, world["id"], "character", "Fantasma", status="dead")
     valid, rejected = delta.validate_delta(conn, world["id"], {"scene": {"present": [ghost["ref"]]}})
-    assert valid["scene"]["present"] == []
+    # The only name given was rejected, so `present` is left untouched (no
+    # change) rather than explicitly cleared — see
+    # test_one_unknown_name_does_not_empty_an_existing_cast below.
+    assert "present" not in valid["scene"]
     assert "dead" in rejected[0]["reason"]
+
+
+def test_one_unknown_name_does_not_empty_an_existing_cast(conn, world, session):
+    """A scene update naming only an unrecognised character (a typo, a
+    nickname the store doesn't know) must not wipe out everyone already in
+    the scene — only that one name is rejected, and the existing cast
+    carries forward untouched."""
+    mateo = store.create_entity(conn, world["id"], "character", "Mateo")
+    nadia = store.create_entity(conn, world["id"], "character", "Nadia")
+    delta.record_turn(conn, world["id"], session["id"], {"scene": {"present": [mateo["ref"], nadia["ref"]]}}, "narration", "agent")
+    assert {e["id"] for e in [mateo, nadia]} == set(store.current_scene(conn, world["id"])["present"])
+
+    valid, rejected = delta.validate_delta(conn, world["id"], {"scene": {"present": ["iria"]}})
+    assert "present" not in (valid["scene"] or {})
+    assert rejected[0]["category"] == "scene.present"
+    assert "unknown entity" in rejected[0]["reason"]
+
+    delta.record_turn(conn, world["id"], session["id"], {"scene": {"present": ["iria"]}}, "narration", "agent")
+    still_present = set(store.current_scene(conn, world["id"])["present"])
+    assert still_present == {mateo["id"], nadia["id"]}, "the existing cast must survive one bad name"
 
 
 def test_move_to_unknown_location_is_rejected(conn, world):
