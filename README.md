@@ -24,31 +24,27 @@ narrates while this app remembers everything.
 
 | Area | Available now | Boundary |
 | --- | --- | --- |
-| World state | Entities (character/location/faction/item/lore/creature), relations, facts with provenance, timeline, threads, clocks, random tables — SQLite + FTS5, accent-insensitive Spanish search | No multi-user editing; one local writer |
-| Dice | Full grammar (`NdM`, `+/-`, `kh/kl`/`dh/dl`, exploding `!`, `adv`/`dis`, fate dice), `check(dc, mod)` and `move(stat)` helpers, seeded reproducibility, audited log | No physical dice-image rendering |
-| Context builder | Deterministic, ranked, budget-bound `world_context()` with citable short ids | Ranking is lexical/rule-based, not embeddings-based semantic search |
-| Delta engine | Atomic apply (SQLite `SAVEPOINT`), per-item validation, full undo of the last turn | One level of undo (the last turn), not a full history stack |
-| Narrator (standalone) | Builds the prompt, calls the shared model backend, parses narration + delta robustly (fenced JSON, bare braces, trailing-comma repair) | Non-streaming; a spinner, not token-by-token output |
-| Consistency check | Three concrete rules (dead-but-acting, location mismatch, contradicted relation) plus an optional LLM judge citing fact ids | Cannot catch contradictions no rule covers and no fact makes explicit |
-| Export | Session → Markdown chapter (optional LLM polish pass), world bible → Markdown, full JSON export/import | Polish pass is instructed not to add facts but is not formally verified against the source |
-| Illustrations | Calls Prospero's Hoard's agent API when it is running; hidden otherwise | Requires that separate app; not built into this one |
-| Shared model backend | Resolves an explicit override, a connected AI's model registry, or a loopback local server, in that order; every feature works with no model connected, visibly degraded | Built as a local adapter (`backend.py`) matching the shared interface rather than the vendored shared package — see below |
-| UI | Play, Bible, Map of relations (SVG), Timeline, Threads & clocks (kanban + segmented-circle clocks), Tables, Sessions, Dice log, Backends, Assistant activity, Settings; ES/EN, light/dark | Map layout is a fixed circular layout, not a physics simulation |
-
-**Boundary — the shared backend adapter.** The house convention for this
-family of apps is to vendor a shared "model backend" package so every app
-resolves a model the same way. At the point this app was built, that
-shared package was still being finished by a parallel effort, so this app
-implements the same public shape itself, in `backend.py` (`resolve()` /
-`status()` / `wait_idle()` / `chat()`, the same states and error types).
-Swapping in the vendored package later is a drop-in replacement of that
-one file; nothing else in the app depends on how it is implemented.
+| World state | Entities (character/location/faction/item/lore/creature) with aliases, stats and GM secrets, relations, facts with provenance and a canon flag, timeline, threads, clocks, random tables; SQLite + FTS5 with accent-insensitive search | One local writer; no multi-user editing |
+| Dice | `NdM`, `+/-`, `kh/kl/dh/dl`, exploding `!`, `adv(d20)`/`dis(d20)`, `dF`; seeded reproducibility; every roll in an append-only log; with a world, 2d6 rolls get their PbtA band and d20 rolls their natural value and crit | Bounded on purpose (200 dice per roll, 100 characters per expression) |
+| Context builder | `world_context()`: premise, content boundaries, current scene and cast, ranked facts, live threads, clocks at least half full and recent turns, each line with a citable id, within a character budget | Ranking is lexical and rule-based, not embedding search |
+| Delta engine | Validation per item, then the delta and its turn in one SQLite transaction; the scene carries over between turns; undo walks back turn by turn within the current session | No redo; turns of an earlier session cannot be undone |
+| Narrator (standalone) | Builds the prompt, calls the shared model through Hoard Link, separates narration from the delta (fenced JSON, bare objects, trailing-comma repair), and lets you accept or reject each proposed change | Not streamed: one reply, with a spinner |
+| Consistency check | Rules for a dead character acting, a character placed away from where they were last seen and a contradicted relation (whole-word, alias-aware), plus an LLM judge over matching facts that must cite fact ids; the result says whether the judge ran | Heuristics: it misses contradictions that no rule covers and no fact states |
+| Export | Session as a Markdown chapter, optionally polished by the shared model (falls back to the plain chapter and says why), world bible in Markdown, full JSON export and import | Polish is instructed not to add facts but is not checked against the source; chapters over 6000 characters are not polished |
+| Illustrations | "Illustrate" calls Prospero's Hoard's agent API when it answers on 127.0.0.1:8815; the button is hidden otherwise | Needs that separate app; the image is shown, not stored on the turn |
+| Shared model backend | Hoard Link vendored unmodified (`scheherazades_hoard/hoard_link/`): explicit settings, then Faustus's model registry, then resident models on loopback (llama.cpp, Ollama, OpenAI-compatible); Settings shows the reason, can clear overrides and never returns the token | Only the language-model capability is used; the app never loads a model itself |
+| UI | Play, Bible, Map of relations (SVG), Timeline, Threads & clocks (kanban and segmented clocks), Tables, Sessions, Dice log, Backends, Assistant activity, Settings; a continuity check box in Play; accent-insensitive Bible search; Spanish and English, light and dark | The map uses a fixed circular layout, not a physics simulation |
 
 ## Connect it to Faustus
 
 The app declares itself with `faustus-plugin.json`. Start the app, then in
 Faustus: **Connectors → Nearby apps → Add**. Faustus finds it by scanning
 loopback ports and reading that manifest.
+
+Two ways to play, same world: connected, Faustus is the narrator and uses
+the tools below (the `narrator-loop` skill tells it in which order); on
+its own, the app narrates with the model Faustus already has loaded,
+found through Hoard Link, so nothing is loaded twice.
 
 | Tool | Read-only | What it does |
 | --- | --- | --- |
@@ -58,14 +54,14 @@ loopback ports and reading that manifest.
 | `world_search(world, query, ...)` | yes | Search entities/facts |
 | `entity_get(world, ref, ...)` | yes | One entity with relations and facts |
 | `entity_upsert(world, kind, name, ...)` | no | Create or update an entity |
-| `story_append(world, text, ...)` | no | Record a turn and apply a delta |
+| `story_append(world, text, ...)` | no | Record a turn and apply a delta, atomically |
 | `dice_roll(expression, ...)` | no | Roll dice with an audited log |
 | `table_roll(world, table)` | no | Roll on a random table |
 | `thread_update(world, thread, ...)` | no | Advance/resolve/abandon a thread |
 | `clock_tick(world, clock, ticks=1)` | no | Advance a clock |
 | `world_check(world, statement)` | yes | Check a statement against established facts |
-| `session_export(world, ...)` | yes | Export a chapter / the bible / full JSON |
-| `story_undo(world)` | no | Revert the last turn |
+| `session_export(world, ...)` | yes | Export a chapter / the bible / full JSON, a page at a time |
+| `story_undo(world)` | no | Revert the last turn and everything its delta changed |
 
 Full argument lists, return shapes and limits: [`docs/MCP.md`](docs/MCP.md).
 
@@ -85,10 +81,14 @@ It also works with any other MCP client over stdio:
 
 ## Run locally on Windows
 
-Double-click **`Iniciar Scheherazade's Hoard.cmd`** (first run creates the
-virtual environment, installs dependencies and builds the frontend
-automatically; it opens the app in your browser once it is ready). Stop
-it with **`Detener Scheherazade's Hoard.cmd`**.
+Double-click **`Iniciar Scheherazade's Hoard.cmd`**. It runs
+`scripts/start.ps1`, which finds Python 3.11 or newer, creates `.venv`
+and installs `requirements-lock.txt` (again whenever the lock changes),
+builds the interface if `frontend/dist` is missing (Node 22 is needed
+only then), starts the app with the repo root as working directory, waits
+for `/api/health` and opens the browser. If the app is already running it
+only opens the browser. Stop it with **`Detener Scheherazade's Hoard.cmd`**
+(`scripts/stop.ps1`), which also stops an instance Faustus started.
 
 Manual steps, from the repo root, in PowerShell:
 
@@ -112,34 +112,36 @@ them: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ## Tests
 
 ```
-python -m pytest tests/ -q
+.venv\Scripts\python.exe -m pytest tests/ -q
 ```
 
-171 tests, offline by default (no network, no real model — the narrator,
-backend and Prospero adapters are exercised through `httpx.MockTransport`
-and mocked HTTP calls), running in under 10 seconds. Coverage includes
-the full dice grammar and seeded reproducibility, the context builder's
-budget/ranking/secret-exclusion, delta validation and atomic apply +
-undo, JSON extraction robustness, the consistency checker's rules,
-accent-insensitive FTS search, Markdown/JSON export, and an MCP protocol
-test that spawns the real adapter over stdio against a live instance of
-the app (`mcp.client.stdio`, `list_tools` plus a full
-create-world → roll → append → undo round trip).
+240 tests, offline (no real model: Hoard Link, the narrator and the
+Prospero adapter run against `httpx.MockTransport`), in about 15 seconds.
+They cover the dice grammar and its bounds, ruleset readings, the context
+builder's budget, ranking and secret exclusion, delta validation, the
+single-transaction turn and undo (including repeated updates in one
+delta), scene carry-over, JSON extraction, the consistency rules,
+accent-insensitive search, exports and import, the static file server
+against path traversal, the Host/Origin guard, the CLI start with its pid
+file and log, and an MCP protocol test that spawns the real adapter over
+stdio against a live instance (`list_tools`, annotations, Keywords lines,
+and a create, roll, append, context and undo round trip).
 
 `npm run build` (inside `frontend/`) runs `tsc -b && vite build` with
 TypeScript strict mode, `noUnusedLocals` and `noUnusedParameters` on.
 
 ## Privacy and limits
 
-- Binds `127.0.0.1` only; no telemetry; no network access except a model
-  call you triggered (the shared backend, or Prospero's Hoard for
-  illustrations), and both are visibly optional — every feature that
-  does not need a model keeps working without one.
-- Your worlds live in `data/` (gitignored) as a local SQLite file. There
-  is no cloud sync and no account.
-- A dead character can still be referenced in narration text; only
-  *acting* as one is caught by the consistency check. Undo covers the
-  last turn, not a full history stack.
-- The narrator's structured output is best-effort parsing of free text;
-  a genuinely malformed reply is kept as narration with `unparsed: true`
-  rather than silently dropped or guessed at.
+- Binds `127.0.0.1` only, rejects other Host headers and cross-site
+  writes, and refuses to be framed by web pages. No telemetry. The only
+  network calls are to model servers on your machine (or the Faustus you
+  configured) and to Prospero's Hoard, both on loopback.
+- Your worlds live in `data/` (gitignored) as one SQLite file; the log is
+  `data/logs/app.log` and records tool names and timings, never story
+  text, secrets or tokens.
+- Agent tools never return GM secrets unless asked with
+  `include_secrets=true`; "Assistant activity" lists every agent call,
+  and your own clicks in the interface are kept out of it.
+- The narrator's structured output is parsed from free text; a reply
+  that cannot be parsed is kept as narration marked `unparsed`, never
+  guessed at.

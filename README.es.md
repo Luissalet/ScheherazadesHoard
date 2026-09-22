@@ -1,10 +1,10 @@
-# El Tesoro de Scheherazade
+# Scheherazade's Hoard
 ### ¿Quién sigue vivo? ¿Quién está dónde? ¿Qué les has prometido?
 **Un guardián de la coherencia y el estado del mundo para ficción interactiva y partidas de rol — recuerda todo lo que un modelo de lenguaje olvida, y le da al narrador exactamente lo que necesita para la siguiente escena.**
 
 [English](README.md) · [Ejecutar en local](#ejecutar-en-local-en-windows) · [Conectar una IA](docs/MCP.md) · [Portfolio](https://luissalet.github.io/Portfolio/#projects)
 
-![La pantalla de Jugar, a mitad de escena, con la bandeja de dados y el panel de hilos y relojes](docs/media/02-play.png)
+![La pantalla Jugar, a mitad de escena, con la bandeja de dados y el panel de hilos y relojes](docs/media/02-play-es.png)
 *Aplicación real, con datos de demostración ("El Archipiélago de Sal", un escenario original generado por `--demo`).*
 
 ## Por qué
@@ -26,33 +26,28 @@ aplicación lo recuerda todo.
 
 | Área | Disponible ahora | Límite |
 | --- | --- | --- |
-| Estado del mundo | Entidades (personaje/lugar/facción/objeto/saber/criatura), relaciones, hechos con procedencia, cronología, hilos, relojes, tablas aleatorias — SQLite + FTS5, búsqueda en español sin distinguir acentos | Sin edición multiusuario; un único escritor local |
-| Dados | Gramática completa (`NdM`, `+/-`, `kh/kl`/`dh/dl`, explosivos `!`, `adv`/`dis`, dados de hado), ayudantes `check(dc, mod)` y `move(stat)`, reproducibilidad con semilla, registro auditado | Sin renderizado de imágenes de dados físicos |
-| Constructor de contexto | `world_context()` determinista, ordenado y con presupuesto de caracteres, con ids citables | El orden es léxico/por reglas, no una búsqueda semántica por embeddings |
-| Motor de cambios (delta) | Aplicación atómica (`SAVEPOINT` de SQLite), validación por elemento, deshacer completo del último turno | Un solo nivel de deshacer (el último turno), no una pila de historial completa |
-| Narrador (modo autónomo) | Construye el prompt, llama al backend de modelo compartido, analiza narración + delta de forma robusta (JSON en bloque, llaves sueltas, reparación de comas finales) | Sin streaming; un indicador de carga, no texto token a token |
-| Comprobación de coherencia | Tres reglas concretas (actuar estando muerto, lugar incoherente, relación contradicha) más un juez por IA opcional que cita los hechos | No detecta contradicciones que ninguna regla cubre y ningún hecho hace explícitas |
-| Exportación | Sesión → capítulo en Markdown (con un pulido opcional por IA), biblia del mundo → Markdown, exportación/importación completa en JSON | El pulido tiene instrucciones de no añadir hechos, pero no se verifica formalmente contra el original |
-| Ilustraciones | Llama a la API de agente de Prospero's Hoard cuando está en marcha; oculto si no lo está | Requiere esa aplicación aparte; no está integrada en esta |
-| Backend de modelo compartido | Resuelve, en este orden, una configuración manual explícita, el registro de modelos de una IA conectada, o un servidor local por loopback; toda función sigue funcionando sin ningún modelo conectado, de forma visible | Implementado como adaptador propio (`backend.py`) con la misma interfaz compartida, en vez del paquete compartido "vendorizado" — ver más abajo |
-| Interfaz | Jugar, Biblia, Mapa de relaciones (SVG), Cronología, Hilos y relojes (kanban + relojes como círculos segmentados), Tablas, Sesiones, Registro de dados, Backends, Actividad del asistente, Ajustes; ES/EN, claro/oscuro | El mapa usa una disposición circular fija, no una simulación física |
-
-**Límite — el adaptador de backend compartido.** La convención de esta
-familia de aplicaciones es compartir un paquete de "backend de modelo"
-vendorizado para que todas resuelvan un modelo de la misma forma. En el
-momento de construir esta aplicación, ese paquete compartido lo estaba
-terminando otro proceso en paralelo, así que esta aplicación implementa
-la misma interfaz pública por su cuenta, en `backend.py` (`resolve()` /
-`status()` / `wait_idle()` / `chat()`, los mismos estados y tipos de
-error). Sustituirlo por el paquete vendorizado más adelante es un cambio
-de ese único archivo; nada más en la aplicación depende de cómo esté
-implementado.
+| Estado del mundo | Entidades (personaje/lugar/facción/objeto/saber/criatura) con alias, estadísticas y secretos del máster, relaciones, hechos con procedencia y marca de canon, cronología, hilos, relojes y tablas aleatorias; SQLite + FTS5 con búsqueda que no distingue tildes | Un único escritor local; sin edición multiusuario |
+| Dados | `NdM`, `+/-`, `kh/kl/dh/dl`, dados que explotan `!`, `adv(d20)`/`dis(d20)`, dados Fate `dF`; reproducibles con semilla; cada tirada queda en un registro de solo añadir; con un mundo, las tiradas de 2d6 traen su banda PbtA y las de d20 su valor natural y el crítico | Con topes a propósito (200 dados por tirada, 100 caracteres por expresión) |
+| Constructor de contexto | `world_context()`: premisa, límites de contenido, escena y reparto actuales, hechos ordenados por relevancia, hilos vivos, relojes a partir de la mitad y últimos turnos, cada línea con un id citable y dentro de un presupuesto de caracteres | El orden es léxico y por reglas, no una búsqueda por embeddings |
+| Motor de cambios (delta) | Validación elemento a elemento; después, el delta y su turno en una sola transacción de SQLite; la escena se mantiene de un turno a otro; deshacer retrocede turno a turno dentro de la sesión actual | No hay rehacer; los turnos de una sesión anterior no se pueden deshacer |
+| Narrador (modo autónomo) | Construye el prompt, llama al modelo compartido a través de Hoard Link, separa la narración del delta (JSON en bloque, objetos sueltos, reparación de comas finales) y te deja aceptar o rechazar cada cambio propuesto | Sin streaming: una respuesta, con indicador de carga |
+| Comprobación de coherencia | Reglas para un personaje muerto que actúa, un personaje situado lejos de donde se le vio por última vez y una relación contradicha (por palabra completa y con alias), más un juez por IA sobre los hechos que coinciden, obligado a citar sus ids; el resultado indica si el juez ha intervenido | Son heurísticas: se le escapan las contradicciones que ninguna regla cubre y ningún hecho recoge |
+| Exportación | Sesión como capítulo en Markdown, con pulido opcional por el modelo compartido (si no puede, devuelve el capítulo sin pulir y dice por qué), biblia del mundo en Markdown, exportación e importación completas en JSON | El pulido tiene instrucciones de no añadir hechos, pero no se contrasta con el original; los capítulos de más de 6000 caracteres no se pulen |
+| Ilustraciones | «Ilustrar» llama a la API de agente de Prospero's Hoard cuando responde en 127.0.0.1:8815; si no, el botón no aparece | Necesita esa otra aplicación; la imagen se muestra, pero no se guarda en el turno |
+| Backend de modelos compartido | Hoard Link incluido sin modificar (`scheherazades_hoard/hoard_link/`): primero la configuración explícita, luego el registro de modelos de Faustus y después los modelos ya cargados en local (llama.cpp, Ollama, servidores compatibles con OpenAI); Ajustes muestra el motivo, permite borrar la configuración manual y nunca devuelve el token | Solo se usa la capacidad de modelo de lenguaje; la aplicación nunca carga un modelo por su cuenta |
+| Interfaz | Jugar, Biblia, Mapa de relaciones (SVG), Cronología, Hilos y relojes (kanban y relojes segmentados), Tablas, Sesiones, Registro de dados, Backends, Actividad del asistente, Ajustes; comprobación de continuidad en Jugar; búsqueda sin tildes en la Biblia; en español e inglés, tema claro y oscuro | El mapa usa una disposición circular fija, no una simulación física |
 
 ## Conectar con Faustus
 
 La aplicación se declara con `faustus-plugin.json`. Arranca la
 aplicación y, en Faustus: **Conectores → Aplicaciones cercanas → Añadir**.
 Faustus la encuentra escaneando puertos locales y leyendo ese manifiesto.
+
+Dos formas de jugar con el mismo mundo: conectada, Faustus hace de
+narrador y usa las herramientas de abajo (la skill `narrator-loop` le
+indica en qué orden); por su cuenta, la aplicación narra con el modelo que
+Faustus ya tiene cargado, localizado mediante Hoard Link, así que nada se
+carga dos veces.
 
 | Herramienta | Solo lectura | Qué hace |
 | --- | --- | --- |
@@ -62,14 +57,14 @@ Faustus la encuentra escaneando puertos locales y leyendo ese manifiesto.
 | `world_search(world, query, ...)` | sí | Busca entidades/hechos |
 | `entity_get(world, ref, ...)` | sí | Una entidad con sus relaciones y hechos |
 | `entity_upsert(world, kind, name, ...)` | no | Crea o actualiza una entidad |
-| `story_append(world, text, ...)` | no | Registra un turno y aplica un delta |
+| `story_append(world, text, ...)` | no | Registra un turno y aplica un delta, de forma atómica |
 | `dice_roll(expression, ...)` | no | Tira dados con registro auditado |
 | `table_roll(world, table)` | no | Tira en una tabla aleatoria |
 | `thread_update(world, thread, ...)` | no | Avanza, resuelve o abandona un hilo |
 | `clock_tick(world, clock, ticks=1)` | no | Avanza un reloj |
 | `world_check(world, statement)` | sí | Comprueba una afirmación contra los hechos establecidos |
-| `session_export(world, ...)` | sí | Exporta un capítulo / la biblia / el JSON completo |
-| `story_undo(world)` | no | Revierte el último turno |
+| `session_export(world, ...)` | sí | Exporta un capítulo / la biblia / el JSON completo, por páginas |
+| `story_undo(world)` | no | Revierte el último turno y todo lo que cambió su delta |
 
 Argumentos completos, forma de la respuesta y límites:
 [`docs/MCP.md`](docs/MCP.md).
@@ -90,10 +85,15 @@ También funciona con cualquier otro cliente MCP por stdio:
 
 ## Ejecutar en local en Windows
 
-Haz doble clic en **`Iniciar Scheherazade's Hoard.cmd`** (la primera vez
-crea el entorno virtual, instala las dependencias y compila la interfaz
-automáticamente; abre la aplicación en tu navegador en cuanto está
-lista). Detenla con **`Detener Scheherazade's Hoard.cmd`**.
+Haz doble clic en **`Iniciar Scheherazade's Hoard.cmd`**. Ejecuta
+`scripts/start.ps1`, que busca Python 3.11 o posterior, crea `.venv` e
+instala `requirements-lock.txt` (de nuevo cada vez que cambia el lock),
+compila la interfaz si falta `frontend/dist` (solo entonces hace falta
+Node 22), arranca la aplicación con la raíz del repositorio como
+directorio de trabajo, espera a `/api/health` y abre el navegador. Si ya
+estaba en marcha, solo abre el navegador. Detenla con
+**`Detener Scheherazade's Hoard.cmd`** (`scripts/stop.ps1`), que también
+detiene una instancia arrancada por Faustus.
 
 Pasos manuales, desde la raíz del repositorio, en PowerShell:
 
@@ -117,39 +117,42 @@ detrás de todo ello: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ## Pruebas
 
 ```
-python -m pytest tests/ -q
+.venv\Scripts\python.exe -m pytest tests/ -q
 ```
 
-171 pruebas, sin red por defecto (ni red real ni modelo real — los
-adaptadores de narrador, backend y Prospero se ejercitan con
-`httpx.MockTransport` y llamadas HTTP simuladas), en menos de 10
-segundos. Cubren la gramática de dados completa y su reproducibilidad
-con semilla, el presupuesto/orden/exclusión de secretos del constructor
-de contexto, la validación y aplicación atómica del delta más su
-deshacer, la robustez de la extracción de JSON, las reglas del
-comprobador de coherencia, la búsqueda FTS insensible a acentos, la
-exportación a Markdown/JSON, y una prueba de protocolo MCP que lanza el
-adaptador real por stdio contra una instancia viva de la aplicación
-(`mcp.client.stdio`, `list_tools` más un ciclo completo de
-crear-mundo → tirar → registrar → deshacer).
+240 pruebas, sin red (ningún modelo real: Hoard Link, el narrador y el
+adaptador de Prospero se prueban contra `httpx.MockTransport`), en unos
+15 segundos. Cubren la gramática de dados y sus topes, la lectura según
+el reglamento, el presupuesto, el orden y la exclusión de secretos del
+constructor de contexto, la validación del delta, el turno en una sola
+transacción y el deshacer (también con varias actualizaciones de lo mismo
+en un delta), la continuidad de la escena, la extracción de JSON, las
+reglas de coherencia, la búsqueda sin tildes, la exportación e
+importación, el servidor de archivos estáticos frente a recorridos de
+ruta, la protección de Host/Origin, el arranque por línea de comandos con
+su archivo de pid y su log, y una prueba del protocolo MCP que lanza el
+adaptador real por stdio contra una instancia en marcha (`list_tools`,
+anotaciones, líneas Keywords y un ciclo de crear, tirar, registrar,
+contexto y deshacer).
 
 `npm run build` (dentro de `frontend/`) ejecuta `tsc -b && vite build`
-con TypeScript en modo estricto, `noUnusedLocals` y `noUnusedParameters`
+con TypeScript en modo estricto y `noUnusedLocals` y `noUnusedParameters`
 activados.
 
 ## Privacidad y límites
 
-- Solo escucha en `127.0.0.1`; sin telemetría; sin acceso a red salvo una
-  llamada a un modelo que tú provocaste (el backend compartido, o
-  Prospero's Hoard para ilustraciones), y ambas son opcionales de forma
-  visible — toda función que no necesita un modelo sigue funcionando sin
-  él.
-- Tus mundos viven en `data/` (excluido de git) como un archivo SQLite
-  local. No hay sincronización en la nube ni cuenta de usuario.
-- Un personaje muerto puede seguir mencionado en el texto narrado; solo
-  *actuar* como uno lo detecta la comprobación de coherencia. Deshacer
-  cubre el último turno, no una pila de historial completa.
-- La salida estructurada del narrador es un análisis de mejor esfuerzo
-  sobre texto libre; una respuesta realmente malformada se conserva como
-  narración con `unparsed: true` en vez de descartarse o adivinarse en
-  silencio.
+- Solo escucha en `127.0.0.1`, rechaza otras cabeceras Host y las
+  escrituras desde otros sitios, y no se deja incrustar en páginas web.
+  Sin telemetría. Las únicas llamadas de red van a servidores de modelos
+  de tu equipo (o al Faustus que hayas configurado) y a Prospero's Hoard,
+  siempre por loopback.
+- Tus mundos viven en `data/` (fuera de git) en un único archivo SQLite;
+  el log es `data/logs/app.log` y guarda nombres de herramientas y
+  tiempos, nunca texto de la historia, secretos ni tokens.
+- Las herramientas del agente no devuelven secretos del máster salvo que
+  se pidan con `include_secrets=true`; «Actividad del asistente» lista
+  cada llamada del agente, y tus propios clics en la interfaz no aparecen
+  ahí.
+- La salida estructurada del narrador se extrae de texto libre; una
+  respuesta que no se puede interpretar se guarda como narración marcada
+  `unparsed`, nunca se rellena a ciegas.
