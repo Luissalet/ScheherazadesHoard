@@ -45,10 +45,17 @@ e.g. E1/F1/T1/C1 — only name new things you are creating):
 """
 
 _FENCE_STRIP_RE = re.compile(r"```(?:json)?\s*.*?```", re.DOTALL | re.IGNORECASE)
+_DANGLING_FENCE_RE = re.compile(r"```(?:json)?\s*$|^\s*```", re.IGNORECASE)
 
 
 def _strip_json_block(text: str) -> str:
-    return _FENCE_STRIP_RE.sub("", text).strip()
+    """Remove a fenced ```json block, plus any fence marker left dangling
+    at the edges once the JSON itself has already been cut out (an
+    unterminated fence — the model never closed it — leaves a bare
+    "```json" or "```" that must not reach the reader)."""
+    text = _FENCE_STRIP_RE.sub("", text)
+    text = _DANGLING_FENCE_RE.sub("", text)
+    return text.strip()
 
 
 def build_system_prompt(world: dict) -> str:
@@ -93,7 +100,7 @@ async def narrate(
         max_tokens=max_tokens, temperature=temperature,
     )
     raw = chat_result.text
-    parsed, span = jsonx.extract_json_span(raw)
+    parsed, span = jsonx.extract_json_span(raw, prefer_keys=DELTA_KEYS)
 
     delta_obj = None
     unparsed = True

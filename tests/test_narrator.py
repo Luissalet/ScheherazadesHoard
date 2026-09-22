@@ -96,3 +96,90 @@ async def test_bare_json_is_cut_out_of_the_narration(conn, world):
     result = await narrator.narrate(_link_with_content(content), conn, world["id"], "avanza")
     assert "new_facts" not in result["narration"]
     assert "La marea sube." in result["narration"] and "Y nadie habla." in result["narration"]
+
+
+# --- usability report #2: sloppy realistic 27B replies ---------------------
+
+async def test_narrate_handles_curly_quotes(conn, world):
+    content = (
+        "El farol titila en la niebla.\n"
+        "```json\n"
+        "{“new_facts”: [{“text”: “El farol titila”}], "
+        "“scene”: {“mood”: “tenso”}}\n"
+        "```"
+    )
+    result = await narrator.narrate(_link_with_content(content), conn, world["id"], "avanza")
+    assert result["unparsed"] is False
+    assert result["delta"]["new_facts"][0]["text"] == "El farol titila"
+    assert result["delta"]["scene"]["mood"] == "tenso"
+    assert "new_facts" not in result["narration"] and "“" not in result["narration"]
+
+
+async def test_narrate_strips_comments_with_trailing_commas(conn, world):
+    content = (
+        "Iria cruza el umbral.\n"
+        "```json\n"
+        "{\n"
+        '  "new_facts": [{"text": "Iria cruza el umbral"},], // lo que cambio\n'
+        '  "clock_ticks": [{"ref": "C1", "ticks": 1}], /* el reloj avanza */\n'
+        "}\n"
+        "```"
+    )
+    result = await narrator.narrate(_link_with_content(content), conn, world["id"], "avanza")
+    assert result["unparsed"] is False
+    assert result["delta"]["new_facts"][0]["text"] == "Iria cruza el umbral"
+    assert result["delta"]["clock_ticks"][0]["ref"] == "C1"
+
+
+async def test_narrate_accepts_delta_nested_under_a_delta_key(conn, world):
+    content = (
+        "La puerta cede con un crujido.\n"
+        "```json\n"
+        '{"delta": {"new_facts": [{"text": "la puerta cede"}], "scene": {"mood": "tenso"}}}\n'
+        "```"
+    )
+    result = await narrator.narrate(_link_with_content(content), conn, world["id"], "avanza")
+    assert result["unparsed"] is False
+    assert result["delta"]["new_facts"][0]["text"] == "la puerta cede"
+
+
+async def test_narrate_salvages_complete_items_from_a_reply_cut_at_the_token_limit(conn, world):
+    # Cut mid-value inside "clock_ticks", as a real reply truncated at
+    # max_tokens would be: the complete new_facts item must survive even
+    # though the object was never closed.
+    content = (
+        "El reloj empieza a correr.\n"
+        "```json\n"
+        '{"new_facts": [{"text": "el reloj empieza a correr"}], "clock_ticks": [{"ref": "C1", "ticks": '
+    )
+    result = await narrator.narrate(_link_with_content(content), conn, world["id"], "avanza")
+    assert result["unparsed"] is False
+    assert result["delta"]["new_facts"][0]["text"] == "el reloj empieza a correr"
+
+
+async def test_unclosed_fence_does_not_leak_into_the_narration(conn, world):
+    content = (
+        "Algo se mueve en la oscuridad.\n"
+        "```json\n"
+        '{"new_facts": [{"text": "algo se mueve"}]}'
+        # never closed with a trailing ```
+    )
+    result = await narrator.narrate(_link_with_content(content), conn, world["id"], "avanza")
+    assert result["unparsed"] is False
+    assert "```" not in result["narration"]
+
+
+async def test_second_fenced_block_with_the_delta_is_read_not_only_the_first(conn, world):
+    content = (
+        "Un momento de duda.\n"
+        "```json\n"
+        '{"note": "borrador descartado"}\n'
+        "```\n"
+        "Se decide y actua.\n"
+        "```json\n"
+        '{"new_facts": [{"text": "se decide y actua"}]}\n'
+        "```"
+    )
+    result = await narrator.narrate(_link_with_content(content), conn, world["id"], "avanza")
+    assert result["unparsed"] is False
+    assert result["delta"]["new_facts"][0]["text"] == "se decide y actua"
