@@ -11,6 +11,7 @@ so the exact same logic that is unit- and TestClient-tested in the app is
 what an agent calls here — this file has no logic of its own beyond
 transport and error translation.
 """
+import logging
 import os
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -19,6 +20,12 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
+
+# httpx logs "HTTP Request: POST ..." at INFO for every loopback call this
+# adapter makes; on stdio transport that is pure noise in the MCP client's
+# log (stdout is the protocol channel, so httpx already logs to stderr, but
+# a line per tool call still drowns out anything worth reading there).
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 APP_NAME = "Scheherazade's Hoard"
 SLUG = "scheherazades-hoard"

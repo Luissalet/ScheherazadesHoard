@@ -128,8 +128,12 @@ export function WorldsPage({
               </p>
               {w.counts && (
                 <div className="tag-row" style={{ marginBottom: 12 }}>
-                  <span className="badge" title={t("worlds_entities", lang)}><Users size={11} /> {w.counts.entities} {t("worlds_entities", lang)}</span>
-                  <span className="badge badge-gold" title={t("worlds_open_threads", lang)}><GitBranch size={11} /> {w.counts.open_threads} {t("worlds_open_threads", lang)}</span>
+                  <span className="badge" title={t(w.counts.entities === 1 ? "worlds_entity_one" : "worlds_entity_many", lang)}>
+                    <Users size={11} /> {w.counts.entities} {t(w.counts.entities === 1 ? "worlds_entity_one" : "worlds_entity_many", lang)}
+                  </span>
+                  <span className="badge badge-gold" title={t(w.counts.open_threads === 1 ? "worlds_open_thread_one" : "worlds_open_thread_many", lang)}>
+                    <GitBranch size={11} /> {w.counts.open_threads} {t(w.counts.open_threads === 1 ? "worlds_open_thread_one" : "worlds_open_thread_many", lang)}
+                  </span>
                   <span className="badge">{w.counts.sessions} {t(w.counts.sessions === 1 ? "worlds_session_one" : "worlds_session_many", lang)}</span>
                   <span className="badge">{w.ruleset}</span>
                 </div>

@@ -188,6 +188,16 @@ async def test_unavailable_app_raises_readable_error(tmp_path):
             assert "scheherazades-hoard_unavailable" in _text(result)
 
 
+def test_httpx_request_logging_is_quiet_on_stdio():
+    """Usability report #25: httpx's per-request INFO log is noise on a
+    stdio transport where every tool call would otherwise print a line."""
+    import logging
+
+    import scheherazades_hoard.mcp_server  # noqa: F401  (import has the side effect under test)
+
+    assert logging.getLogger("httpx").level >= logging.WARNING
+
+
 def test_refuses_non_loopback_url(monkeypatch):
     import importlib
     import sys as _sys

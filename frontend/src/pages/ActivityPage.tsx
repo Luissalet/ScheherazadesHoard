@@ -27,6 +27,7 @@ export function ActivityPage({ lang }: { lang: Lang }) {
         <table className="simple">
           <thead>
             <tr>
+              <th>{lang === "es" ? "Hora" : "Time"}</th>
               <th>{t("activity_tool", lang)}</th>
               <th>{lang === "es" ? "Argumentos" : "Arguments"}</th>
               <th>{t("activity_duration", lang)}</th>
@@ -36,9 +37,10 @@ export function ActivityPage({ lang }: { lang: Lang }) {
           <tbody>
             {calls.map((c) => (
               <tr key={c.id}>
+                <td>{new Date(c.created_at * 1000).toLocaleTimeString(lang === "es" ? "es-ES" : "en-US")}</td>
                 <td>{c.tool}</td>
                 <td style={{ fontSize: 11, color: "var(--text-muted)" }}>{c.args_summary}</td>
-                <td>{c.duration_ms} ms</td>
+                <td>{Math.round(c.duration_ms)} ms</td>
                 <td>
                   {c.ok ? <Badge kind="accent">{t("activity_ok", lang)}</Badge> : <Badge kind="danger">{t("activity_error", lang)}</Badge>}
                   {c.error && <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 6 }}>{c.error}</span>}
