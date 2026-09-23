@@ -116,7 +116,8 @@ if (-not (Test-Path -LiteralPath $VenvPython)) {
 # so a failed or interrupted first install is retried instead of skipped.
 $LockFile = Join-Path $RepoRoot "requirements-lock.txt"
 $Stamp = Join-Path (Join-Path $RepoRoot ".venv") "lock.sha256"
-$LockHash = (Get-FileHash -LiteralPath $LockFile -Algorithm SHA256).Hash
+# SHA-256 through .NET: Get-FileHash is missing when Windows PowerShell is started from PowerShell 7.
+$LockHash = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($LockFile))).Replace('-', '')
 $Installed = ""
 if (Test-Path -LiteralPath $Stamp) { $Installed = (Get-Content -LiteralPath $Stamp -Raw).Trim() }
 if ($Installed -ne $LockHash) {
