@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from . import __version__, backend, consistency, context as context_mod
 from . import db, delta as delta_mod, dice, export, narrator, prospero, store, tables, views
+from .hoard_link import family
 
 SERVICE = "scheherazades-hoard"
 DISPLAY_NAME = "Scheherazade's Hoard"
@@ -425,7 +426,8 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
             worlds = store.list_worlds(C())
         return {
             "service": SERVICE, "name": DISPLAY_NAME, "version": __version__,
-            "status": "ok", "worlds": len(worlds),
+            "status": "ok", "worlds": len(worlds),            "hoard_link": family.health_block(),
+
         }
 
     async def _reload_link() -> None:
@@ -942,5 +944,13 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
                 "<p>The frontend has not been built yet. Run "
                 "<code>cd frontend &amp;&amp; npm ci &amp;&amp; npm run build</code>.</p>"
             )
+
+    # The family contract (Hoard Link 0.4): the shared GET /api/agent/tools +
+    # POST /api/agent/call over the per-tool routes above (which stay as they
+    # are), a bearer token in data/mcp-token, and one agent.call event per
+    # call on the hub's bus. Descriptions come from mcp_server.py's docstrings
+    # so the two catalogues never disagree.
+    family.install_fastapi(app, "scheherazade", str(data_dir),
+                           mcp_source=str(Path(__file__).with_name("mcp_server.py")))
 
     return app

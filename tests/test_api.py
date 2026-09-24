@@ -271,7 +271,11 @@ def test_backend_status_shape(client):
     assert body["config"]["token_set"] is False
 
 
-def test_prospero_available_false_when_not_running(client):
+def test_prospero_available_false_when_not_running(client, monkeypatch):
+    # Hermetic: on the developer's machine Prospero IS running on 8815.
+    from scheherazades_hoard import prospero
+    monkeypatch.setattr(prospero, "PROSPERO_URL", "http://127.0.0.1:1")
+    monkeypatch.setattr(prospero.is_available, "__defaults__", ("http://127.0.0.1:1", None))
     r = client.get("/api/prospero/available")
     assert r.status_code == 200
     assert r.json()["available"] is False
