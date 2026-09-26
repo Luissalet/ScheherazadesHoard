@@ -97,7 +97,7 @@ async def narrate(
 
     chat_result = await link.chat(
         [{"role": "system", "content": system}, {"role": "user", "content": user_content}],
-        max_tokens=max_tokens, temperature=temperature,
+        max_tokens=max_tokens, temperature=temperature, effort="medium",
     )
     raw = chat_result.text
     parsed, span = jsonx.extract_json_span(raw, prefer_keys=DELTA_KEYS)

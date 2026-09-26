@@ -692,7 +692,7 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
                     "reason": f"too long to polish in one pass ({len(raw)} > {export.POLISH_MAX_CHARS} characters)"}
         try:
             result = await L().chat([{"role": "user", "content": export.polish_prompt(raw)}],
-                                    max_tokens=3000, temperature=0.3)
+                                    max_tokens=3000, temperature=0.3, effort="medium")
         except (backend.Unavailable, backend.BackendError) as e:
             return {"text": raw, "polished": False, "reason": str(e)}
         if not result.text.strip():
@@ -848,7 +848,8 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
         wid = store.resolve_world_id(C(), body.world)
 
         async def chat_fn(prompt: str) -> str:
-            result = await L().chat([{"role": "user", "content": prompt}], max_tokens=400, temperature=0.0)
+            result = await L().chat([{"role": "user", "content": prompt}], max_tokens=400, temperature=0.0,
+                                    effort="high")
             return result.text
 
         return await consistency.world_check(C(), wid, body.statement, chat_fn=chat_fn)
