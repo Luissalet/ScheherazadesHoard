@@ -1,5 +1,6 @@
-"""Unit tests for the tiny, mocked Prospero's Hoard illustration adapter."""
-from __future__ import annotations
+"""Mocked checks for the optional Prospero illustration adapter."""
+
+import asyncio
 
 import httpx
 
@@ -24,26 +25,49 @@ async def test_is_available_false_for_wrong_service():
     assert await prospero.is_available(transport=httpx.MockTransport(handler)) is False
 
 
-async def test_illustrate_scene_returns_image_url():
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/agent/studio_generate_image"
-        return httpx.Response(200, json={"image_url": "http://127.0.0.1:8815/files/abc.png"})
-    url = await prospero.illustrate_scene("un muelle en ruinas", "Puerto Salado", "tenso", transport=httpx.MockTransport(handler))
-    assert url == "http://127.0.0.1:8815/files/abc.png"
-
-
 async def test_illustrate_scene_returns_none_on_failure():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500)
-    url = await prospero.illustrate_scene("x", transport=httpx.MockTransport(handler))
-    assert url is None
+    assert await prospero.illustrate_scene("x", transport=httpx.MockTransport(handler)) is None
 
 
 async def test_illustrate_scene_returns_none_when_prompt_empty():
-    url = await prospero.illustrate_scene("", "", "")
-    assert url is None
+    assert await prospero.illustrate_scene("", "", "") is None
 
 
 def test_build_prompt_joins_nonempty_parts():
     assert prospero.build_prompt("un muelle", "Puerto", "tenso") == "Puerto, un muelle, tenso"
     assert prospero.build_prompt("", "", "") == ""
+
+
+def test_illustration_creates_project_and_returns_asset_url():
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path, dict(request.url.params)))
+        if request.url.path == "/api/projects" and request.method == "GET":
+            return httpx.Response(200, json={"items": []})
+        if request.url.path == "/api/projects" and request.method == "POST":
+            return httpx.Response(200, json={"id": "project_1"})
+        if request.url.path.endswith("studio_generate_image"):
+            return httpx.Response(200, json={"job": {"id": "job_1", "state": "queued"}})
+        if request.url.path.endswith("studio_job"):
+            return httpx.Response(200, json={"id": "job_1", "state": "done", "asset_ids": ["asset_1"]})
+        return httpx.Response(404)
+
+    url = asyncio.run(prospero.illustrate_scene("un faro en la niebla", world_name="Archipiélago",
+                                               transport=httpx.MockTransport(handler)))
+    assert url == "http://127.0.0.1:8815/api/assets/asset_1/file"
+    assert calls[0][2]["query"] == "Scheherazade · Archipiélago"
+    assert calls[2][2]["project"] == "project_1"
+
+
+def test_illustration_reuses_project_and_handles_failed_job():
+    def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"items": [{"id": "existing", "name": "Scheherazade · Mundo"}]})
+        return httpx.Response(200, json={"job": {"id": "j", "state": "failed"}})
+
+    url = asyncio.run(prospero.illustrate_scene("noche", world_name="Mundo",
+                                               transport=httpx.MockTransport(handler)))
+    assert url is None

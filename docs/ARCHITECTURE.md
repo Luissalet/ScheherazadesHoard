@@ -44,7 +44,7 @@ the app's own venv would use for its dependencies.
 | `hoard_link/` | Hoard Link, the shared model-backend resolver, vendored unmodified (`VENDORED.txt` names the public source and version). |
 | `backend.py` | This app's thin wrapper over Hoard Link (see below). |
 | `narrator.py` | Standalone-mode narration: builds the system/user prompt from `world_context()` plus the player's action, calls the backend, and splits the model's reply into narration prose and a delta with `jsonx`. |
-| `prospero.py` | Optional illustration adapter — checks `127.0.0.1:8815/api/health` for Prospero's Hoard and, if present, calls its agent API; fails closed (returns `False`/`None`) on any error so this feature never blocks the rest of the app. |
+| `prospero.py` | Optional illustration adapter — checks `127.0.0.1:8815/api/health`, finds or creates a Prospero project named for the world, waits for the image job and returns the asset file URL. It fails closed (returns `False`/`None`) on any error so this feature never blocks the rest of the app. |
 | `demo.py` | `seed_demo_world()` — idempotent synthetic world ("El Archipiélago de Sal": 14 entities, 5 characters with secrets, 7 relations, 6 facts, 2 timeline events, 3 threads, 2 clocks, 2 tables, one 13-turn session recorded through `record_turn()` with two seeded, logged 2d6 moves), used by `--demo` and by the screenshots script. |
 | `api.py` | `create_app()` — FastAPI app: the browser-attack guard middleware, exception handlers, every `/api/agent/<tool>` endpoint (exactly what the MCP adapter calls), the richer UI CRUD endpoints, and static-file serving for the SPA. |
 | `mcp_server.py` | The standalone stdio MCP adapter described in `docs/MCP.md`. |

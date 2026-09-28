@@ -709,7 +709,10 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
         available = await prospero.is_available()
         if not available:
             raise HTTPException(503, {"error": "prospero_unavailable", "message": "Prospero's Hoard is not running."})
-        url = await prospero.illustrate_scene(body.scene_brief, body.location_name, body.mood)
+        with _db_lock:
+            world_row = store.get_world(C(), world)
+        url = await prospero.illustrate_scene(body.scene_brief, body.location_name, body.mood,
+                                              world_name=world_row["name"])
         if not url:
             raise HTTPException(502, {"error": "illustrate_failed", "message": "Prospero could not generate an image."})
         return {"image_url": url}
