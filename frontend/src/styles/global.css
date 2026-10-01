@@ -1,7 +1,36 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/cormorant-garamond";
+@import "./hoard-theme.css";
 
+/* Dark by default through the shared Hoard tokens (hoard-theme.css);
+   the original light palette stays available via data-theme="light". */
 :root {
+  --accent: var(--hoard-accent);
+  --accent-strong: var(--hoard-accent-strong);
+  --accent-soft: var(--hoard-accent-soft);
+  --gold: #f2b84b;
+  --gold-soft: rgba(242, 184, 75, 0.14);
+
+  --bg: var(--hoard-deep);
+  --bg-elevated: var(--hoard-surface);
+  --bg-sunken: var(--hoard-sunken);
+  --text: var(--hoard-text);
+  --text-muted: var(--hoard-text-muted);
+  --border: var(--hoard-border);
+  --danger: #e07a5f;
+  --danger-soft: rgba(224, 122, 95, 0.16);
+  --success: #6bc28f;
+
+  --font-ui: "Inter Variable", var(--hoard-font-sans);
+  --font-story: "Cormorant Garamond Variable", Georgia, serif;
+
+  --radius: var(--hoard-radius-lg);
+  --radius-sm: var(--hoard-radius);
+  --shadow: var(--hoard-shadow);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
   --accent: #3f4bd8;
   --accent-strong: #2f3ab0;
   --accent-soft: rgba(63, 75, 216, 0.12);
@@ -27,45 +56,6 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #14131c;
-    --bg-elevated: #1b1a26;
-    --bg-sunken: #100f17;
-    --text: #ece8f5;
-    --text-muted: #9791ad;
-    --border: #2c2a3c;
-    --accent: #6b76ea;
-    --accent-strong: #8992f0;
-    --accent-soft: rgba(107, 118, 234, 0.18);
-    --gold: #f2b84b;
-    --gold-soft: rgba(242, 184, 75, 0.14);
-    --danger: #e07a5f;
-    --danger-soft: rgba(224, 122, 95, 0.16);
-    --success: #6bc28f;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
-    color-scheme: dark;
-  }
-}
-
-:root[data-theme="dark"] {
-  --bg: #14131c;
-  --bg-elevated: #1b1a26;
-  --bg-sunken: #100f17;
-  --text: #ece8f5;
-  --text-muted: #9791ad;
-  --border: #2c2a3c;
-  --accent: #6b76ea;
-  --accent-strong: #8992f0;
-  --accent-soft: rgba(107, 118, 234, 0.18);
-  --gold: #f2b84b;
-  --gold-soft: rgba(242, 184, 75, 0.14);
-  --danger: #e07a5f;
-  --danger-soft: rgba(224, 122, 95, 0.16);
-  --success: #6bc28f;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
-  color-scheme: dark;
-}
 
 * {
   box-sizing: border-box;
@@ -781,3 +771,37 @@ label.btn {
 .entity-edit textarea {
   width: 100%;
 }
+
+/* ---- Hoard family chrome (matches the shared look) ---- */
+.app-shell { grid-template-columns: var(--hoard-sidebar-w) 1fr; }
+.sidebar { background: var(--hoard-surface); padding: 0 12px 12px; gap: 2px; }
+.sidebar-brand { height: var(--hoard-header-h); margin: 0 -12px 8px; padding: 0 16px; border-bottom: 1px solid var(--hoard-border); flex-shrink: 0; }
+.sidebar-brand-icon { width: 32px; height: 32px; background: transparent; }
+.sidebar-brand-icon svg { width: 32px; height: 32px; }
+.sidebar-brand-name { font-family: var(--hoard-font-serif); font-weight: 700; font-size: 15px; color: var(--hoard-accent); }
+.sidebar-section-label { color: var(--hoard-text-dim); }
+.nav-item { height: 40px; padding: 0 12px; font-size: 14px; color: var(--hoard-text-muted); flex-shrink: 0; }
+.nav-item:hover { background: var(--hoard-elevated); color: var(--hoard-text); }
+.nav-item.active { background: var(--hoard-elevated); color: var(--hoard-text); font-weight: 500; }
+.nav-item.active svg { color: var(--hoard-accent); }
+.header { height: var(--hoard-header-h); padding: 0 20px; background: var(--hoard-deep); }
+.icon-button { border-radius: var(--hoard-radius); }
+.icon-button:hover { background: var(--hoard-elevated); border-color: var(--hoard-border-hover); }
+.btn { min-height: 36px; border-radius: var(--hoard-radius); }
+.btn:hover:not(:disabled) { background: var(--hoard-elevated); border-color: var(--hoard-border-hover); }
+.btn-primary, .mode-tab.active { color: var(--hoard-accent-ink); }
+.btn-primary:hover:not(:disabled) { background: var(--hoard-accent-strong); border-color: var(--hoard-accent-strong); color: var(--hoard-accent-ink); }
+.badge-gold { color: var(--gold); }
+input::placeholder, textarea::placeholder { color: var(--hoard-text-dim); }
+
+:root[data-theme="light"] .sidebar { background: var(--bg-sunken); }
+:root[data-theme="light"] .sidebar-brand { border-bottom-color: var(--border); }
+:root[data-theme="light"] .sidebar-brand-name { color: var(--text); }
+:root[data-theme="light"] .nav-item { color: var(--text); }
+:root[data-theme="light"] .nav-item:hover { background: var(--bg-elevated); }
+:root[data-theme="light"] .nav-item.active { background: var(--accent-soft); color: var(--accent-strong); }
+:root[data-theme="light"] .header { background: var(--bg-elevated); }
+:root[data-theme="light"] .btn-primary, :root[data-theme="light"] .mode-tab.active { color: white; }
+:root[data-theme="light"] .btn:hover:not(:disabled) { background: var(--bg-elevated); border-color: var(--accent); }
+:root[data-theme="light"] .btn-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); color: white; }
+:root[data-theme="light"] .badge-gold { color: #8a5f10; }

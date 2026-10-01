@@ -31,8 +31,8 @@ function readTheme(): Theme {
   } catch {
     /* ignore */
   }
-  // no explicit choice yet: follow the operating system
-  return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  // no explicit choice yet: dark by default (the toggle still switches to light)
+  return "dark";
 }
 
 function readWorldId(): string | null {
@@ -57,7 +57,7 @@ export default function App() {
   }, [theme]);
 
   // Only an explicit choice is remembered; until then the theme keeps
-  // following prefers-color-scheme.
+  // defaulting to dark.
   const chooseTheme = (next: Theme) => {
     setTheme(next);
     try {
