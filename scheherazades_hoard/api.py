@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import functools
 import logging
@@ -21,7 +22,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from pydantic import BaseModel, Field
 
 from . import __version__, backend, consistency, context as context_mod
-from . import db, delta as delta_mod, dice, export, narrator, prospero, store, tables, views
+from . import db, delta as delta_mod, dice, exchange, export, hub_bridge, narration, narrator, prospero, store, tables, views
 from .hoard_link import family
 
 SERVICE = "scheherazades-hoard"
@@ -206,6 +207,24 @@ class WorldCheckBody(BaseModel):
     statement: str
 
 
+class WorldExportBody(BaseModel):
+    world_id: Optional[str] = None
+    world: Optional[str] = None  # the same as world_id: an id or the exact name
+
+
+class WorldImportBody(BaseModel):
+    data: dict[str, Any]  # a hoard.world/1 document
+    world_id: Optional[str] = None  # the world to merge into; omitted: the world this document was imported into before, else a new one
+
+
+class SceneNarrateBody(BaseModel):
+    session_id: str
+    turn: Optional[Any] = None  # a turn index (0, 1, ...) or id; omitted: the last narration
+    voice: Optional[str] = None
+    lang: Optional[str] = None
+    world: Optional[str] = None  # only needed when session_id is a session title
+
+
 class SessionExportBody(BaseModel):
     world: str
     session: Optional[str] = None
@@ -297,7 +316,7 @@ def _static_file(root: Path, rel: str) -> Optional[Path]:
 # App factory
 # ---------------------------------------------------------------------------
 
-def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DEFAULT_PORT) -> FastAPI:
+def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DEFAULT_PORT, hub: Optional[Any] = None) -> FastAPI:
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     conn = db.connect(data_dir / "scheherazade.db")
@@ -307,6 +326,7 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     app.state.conn = conn
     app.state.port = port
     app.state.data_dir = data_dir
+    app.state.hub = hub if hub is not None else hub_bridge.Hub()  # other family apps, through the hub (optional)
     app.state.link, app.state.backend_config_error = backend.load_link(backend_json)
     app.state.backend_json = backend_json
 
@@ -897,6 +917,71 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
             "total_chars": len(text), "truncated": end < len(text),
             "next_offset": end if end < len(text) else None,
         }
+
+    @app.post("/api/agent/world_export")
+    @agent_call("world_export")
+    async def a_world_export(body: WorldExportBody):
+        ref = body.world_id or body.world
+        if not ref:
+            raise ValueError("pass world_id (a world's id or exact name)")
+        wid = store.resolve_world_id(C(), ref)
+        return {"ok": True, **exchange.export_world(C(), wid)}
+
+    @app.post("/api/agent/world_import")
+    @agent_call("world_import")
+    async def a_world_import(body: WorldImportBody):
+        try:
+            result = exchange.import_world(C(), body.data, body.world_id)
+        except exchange.WorldDocumentError as e:
+            raise HTTPException(400, {"error": "bad_document", "message": str(e)})
+        source_ref = result.get("source_ref")
+        if source_ref and not source_ref.startswith(exchange.OWN) and result["items"]:
+            # A hint for the hub's "Links" tab; never blocks or fails the import.
+            await asyncio.to_thread(app.state.hub.link, result["world_ref"], source_ref, "imported_from",
+                                    from_label=result["world"]["name"], to_label=result["world"]["name"])
+        shown = result["items"][:100]
+        return {"ok": True, **{k: v for k, v in result.items() if k not in ("items", "source_ref")},
+                "items": shown, "items_truncated": len(result["items"]) > len(shown)}
+
+    @app.post("/api/agent/scene_narrate")
+    @agent_call("scene_narrate")
+    async def a_scene_narrate(body: SceneNarrateBody):
+        session = narration.find_session(C(), body.session_id, body.world)
+        turn = narration.pick_turn(C(), session, body.turn)
+        world = store.get_world(C(), session["world_id"])
+        args: dict[str, Any] = {"text": narration.text_to_read(turn), "lang": body.lang or world.get("language") or "es"}
+        if body.voice:
+            args["voice"] = body.voice
+        answer = await asyncio.to_thread(app.state.hub.call, "prospero", "voice_tts", args, 180.0)
+        if not answer.get("ok"):
+            reason = str(answer.get("error") or f"HTTP {answer.get('status')}")
+            down = answer.get("status") in (None, 404, 502, 503)
+            raise HTTPException(503 if down else 502, {
+                "error": "voice_unavailable" if down else "voice_failed",
+                "message": f"Prospero's Hoard could not narrate this turn: {reason}"
+                           + (" Start the hub and Prospero's Hoard, then try again." if down else "")})
+        result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
+        if result.get("ok") is False:
+            raise HTTPException(502, {"error": "voice_failed", "message": f"Prospero's Hoard could not narrate this turn: {result.get('error') or 'unknown error'}"})
+        try:
+            name, path = narration.keep_audio(data_dir, turn["id"], result.get("path"))
+        except narration.NarrationError as e:
+            raise HTTPException(502, {"error": e.code, "message": str(e)})
+        store.set_turn_audio(C(), turn["id"], session["world_id"], name, source_path=str(result.get("path") or ""), voice=body.voice or "")
+        return {"ok": True, "turn_id": turn["id"], "turn_index": turn["idx"], "session_id": session["id"], "path": str(path),
+                "audio_url": f"/api/turns/{turn['id']}/audio", "voice": body.voice or "", "bytes": path.stat().st_size}
+
+    @app.get("/api/narration/available")
+    async def narration_available_ep():
+        return {"available": await asyncio.to_thread(app.state.hub.app_running, "prospero")}
+
+    @app.get("/api/turns/{turn_id}/audio")
+    async def turn_audio_ep(turn_id: str):
+        record = store.get_turn_audio(C(), turn_id)
+        path = narration.audio_file(data_dir, record) if record else None
+        if not path:
+            raise HTTPException(404, {"error": "not_found", "message": "this turn has no narration audio"})
+        return FileResponse(path, media_type=narration.AUDIO_TYPES.get(path.suffix.lower(), "application/octet-stream"))
 
     @app.post("/api/agent/story_undo")
     @agent_call("story_undo")

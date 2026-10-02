@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
-import { Dices, Eye, EyeOff, Image as ImageIcon, MapPin, ShieldCheck, Sparkles, Undo2 } from "lucide-react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Dices, Eye, EyeOff, Image as ImageIcon, MapPin, ShieldCheck, Sparkles, Square, Undo2, Volume2 } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
@@ -18,7 +18,40 @@ function turnClass(role: TurnRole, undone: boolean): string {
   return `turn turn-${role}${undone ? " turn-undone" : ""}`;
 }
 
-function TurnView({ turn }: { turn: Turn }) {
+const NARRATABLE = new Set<TurnRole>(["narration", "dialogue", "action"]);
+
+interface Voice {
+  lang: Lang;
+  available: boolean; // the hub and the voice app are up
+  busyId: string | null;
+  playingId: string | null;
+  onRead: (turn: Turn) => void;
+  onPlay: (turn: Turn) => void;
+}
+
+/** Read aloud / play / stop for one turn; nothing at all when there is no audio and no voice app. */
+function VoiceButton({ turn, voice }: { turn: Turn; voice: Voice }) {
+  if (turn.undone || !NARRATABLE.has(turn.role) || !turn.text.trim()) return null;
+  if (turn.audio) {
+    const playing = voice.playingId === turn.id;
+    return (
+      <button className="icon-button" onClick={() => voice.onPlay(turn)} title={t(playing ? "play_stop" : "play_listen", voice.lang)}
+        aria-label={t(playing ? "play_stop" : "play_listen", voice.lang)} data-voice="play">
+        {playing ? <Square size={13} /> : <Volume2 size={13} />}
+      </button>
+    );
+  }
+  if (!voice.available) return null;
+  const busy = voice.busyId === turn.id;
+  return (
+    <button className="icon-button" disabled={busy || voice.busyId !== null} onClick={() => voice.onRead(turn)}
+      title={t(busy ? "play_reading" : "play_read_aloud", voice.lang)} aria-label={t("play_read_aloud", voice.lang)} data-voice="read">
+      <Volume2 size={13} />
+    </button>
+  );
+}
+
+function TurnView({ turn, voice }: { turn: Turn; voice: Voice }) {
   if (turn.role === "roll") {
     const roll = turn.rolls?.[0] as { expression?: string; total?: number; natural?: number } | undefined;
     return (
@@ -28,7 +61,12 @@ function TurnView({ turn }: { turn: Turn }) {
       </div>
     );
   }
-  return <div className={turnClass(turn.role, turn.undone)}>{turn.text}</div>;
+  return (
+    <div className={turnClass(turn.role, turn.undone)}>
+      {turn.text}
+      <span style={{ marginLeft: 6, whiteSpace: "nowrap" }}><VoiceButton turn={turn} voice={voice} /></span>
+    </div>
+  );
 }
 
 const GONE = new Set(["dead", "destroyed", "missing"]);
@@ -147,6 +185,10 @@ export function PlayPage({ world, lang, onWorldChanged }: { world: World; lang: 
   const [proposal, setProposal] = useState<NarrateResult | null>(null);
   const [selection, setSelection] = useState<DeltaSelection>({});
   const [prospero, setProspero] = useState(false);
+  const [voiceUp, setVoiceUp] = useState(false);
+  const [busyVoice, setBusyVoice] = useState<string | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [diceExpr, setDiceExpr] = useState("1d20");
   const [illustrating, setIllustrating] = useState(false);
   const [image, setImage] = useState<string | null>(null);
@@ -167,7 +209,43 @@ export function PlayPage({ world, lang, onWorldChanged }: { world: World; lang: 
   useEffect(() => {
     refresh().catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
     api.prosperoAvailable().then((r) => setProspero(r.available)).catch(() => setProspero(false));
+    api.narrationAvailable().then((r) => setVoiceUp(r.available)).catch(() => setVoiceUp(false));
   }, [refresh]);
+
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
+
+  function stopAudio() {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    setPlayingId(null);
+  }
+
+  function playTurn(turn: Turn) {
+    if (playingId === turn.id) return stopAudio();
+    stopAudio();
+    const audio = new Audio(api.turnAudioUrl(turn.id));
+    audio.onended = () => { if (audioRef.current === audio) stopAudio(); };
+    audio.onerror = () => { if (audioRef.current === audio) { stopAudio(); setError(t("play_audio_failed", lang)); } };
+    audioRef.current = audio;
+    setPlayingId(turn.id);
+    audio.play().catch(() => { if (audioRef.current === audio) { stopAudio(); setError(t("play_audio_failed", lang)); } });
+  }
+
+  async function readTurn(turn: Turn) {
+    if (!session) return;
+    setBusyVoice(turn.id);
+    setError(null);
+    try {
+      await api.narrateTurn(session.id, turn.id);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusyVoice(null);
+    }
+  }
+
+  const voice: Voice = { lang, available: voiceUp, busyId: busyVoice, playingId, onRead: readTurn, onPlay: playTurn };
 
   async function sendTurn(role: TurnRole, text: string) {
     if (!text.trim()) return;
@@ -316,7 +394,7 @@ export function PlayPage({ world, lang, onWorldChanged }: { world: World; lang: 
         <div className="transcript">
           {turns === null && <p>{t("loading", lang)}</p>}
           {turns && turns.length === 0 && <p style={{ color: "var(--text-muted)" }}>{t("play_empty", lang)}</p>}
-          {turns?.map((turn) => <TurnView key={turn.id} turn={turn} />)}
+          {turns?.map((turn) => <TurnView key={turn.id} turn={turn} voice={voice} />)}
         </div>
 
         {proposal && (

@@ -152,7 +152,9 @@ def export_world_json(conn, world_id: str) -> dict[str, Any]:
     sessions = store.list_sessions(conn, world_id)
     turns = []
     for s in sessions:
-        turns.extend(store.list_turns(conn, s["id"]))
+        for t in store.list_turns(conn, s["id"]):
+            t.pop("audio", None)  # a file name inside this machine's data folder means nothing elsewhere
+            turns.append(t)
     return {
         "format": "scheherazades-hoard-world-export", "version": 1,
         "world": world, "entities": entities, "relations": relations,

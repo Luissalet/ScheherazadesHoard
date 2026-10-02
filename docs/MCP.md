@@ -1,6 +1,6 @@
 # MCP tools
 
-Scheherazade's Hoard exposes 16 tools over the Model Context Protocol
+Scheherazade's Hoard exposes 19 tools over the Model Context Protocol
 (stdio transport), implemented in `scheherazades_hoard/mcp_server.py`. Each
 tool is a thin wrapper over `POST /api/agent/<tool>` on the running app,
 so the logic is the same one tested with `TestClient` in `tests/`; the
@@ -72,13 +72,16 @@ exact name.
 | `clock_tick(world, clock, ticks=1)` | no | no | `{id, ref, name, filled, segments, full, on_full}` |
 | `world_check(world, statement)` | yes | yes | `{consistent, conflicts: [{fact_id, text, why}], checked, rules_checked, llm_judge}` |
 | `session_export(world, session=None, format="md", offset=0, max_chars=6000)` | yes | yes | `{format, kind, text, offset, total_chars, truncated, next_offset}` |
+| `world_export(world_id)` | yes | yes | a `hoard.world/1` document (see [`WORLD_SCHEMA.md`](WORLD_SCHEMA.md)): `{ok, schema, source: {app, ref, revision, exported_at}, world, characters, places, factions, things, relations, events}`; never secrets, images, facts or sessions |
+| `world_import(data, world_id=None)` | no | yes | `{ok, world: {id, name}, world_created, world_ref, counts: {created, updated, unchanged, local_modified, linked_existing, name_collision, own, skipped}, items: [first 100: {section, ref, name, state, id?, reason?}], items_truncated}`; merges into `world_id`, else into the world this document was imported into before, else into a new world; never deletes, never overwrites a record edited here; 400 `bad_document` when `data` is not hoard.world/1 |
+| `scene_narrate(session_id, turn=None, voice=None, lang=None)` | no | no | `{ok, turn_id, turn_index, session_id, path, audio_url, voice, bytes}`: reads a turn (index or id; default the last narration, dialogue or action) with Prospero's voice through the hub (`voice_tts`), copies the audio into `<data>/audio/` and stores it on the turn; 503 `voice_unavailable` when the hub or Prospero is not running, 502 `voice_failed` / `audio_unreadable` otherwise |
 | `story_undo(world)` | no | no | `{undone_turn_id, turn_index, role, text, scene}` |
 | `session_start(world, title="")` | no | no | the new session `{id, title, started_at, ...}`, now current; an empty title gets a localized default ("Sesión 2") |
 | `session_rename(world, session, title)` | no | yes | the renamed session, same shape |
 
 No tool is destructive in the MCP sense (`destructiveHint: false`):
 `story_undo` only reverts what the last turn itself did. None reaches
-outside the machine (`openWorldHint: false`). `thread_update` is not
+outside the machine (`openWorldHint: false`; `scene_narrate` only talks to Prospero's Hoard on loopback, through the hub). `thread_update` is not
 idempotent because a `note` is appended on every call. Every docstring
 ends with a `Keywords:` line in English and Spanish, which Faustus uses to
 pick tools by retrieval.

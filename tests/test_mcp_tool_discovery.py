@@ -34,6 +34,9 @@ SPANISH_REQUESTS = [
     ("deshacer el último turno", "story_undo"),
     ("empieza una nueva sesión", "session_start"),
     ("cambia el nombre de esta sesión", "session_rename"),
+    ("exporta el mundo para pasar los personajes a otra app", "world_export"),
+    ("importa el mundo y trae los personajes de Writer", "world_import"),
+    ("narra en voz alta la escena", "scene_narrate"),
 ]
 
 _WORD_RE = re.compile(r"[a-záéíóúñü0-9]+", re.IGNORECASE)
@@ -63,7 +66,7 @@ def _pick_tool(request: str, tools: list) -> str:
 
 def test_every_tool_description_has_spanish_words_on_line_one():
     tools = asyncio.run(mcp_server.mcp.list_tools())
-    assert len(tools) == 16
+    assert len(tools) == 19
     accented = set("áéíóúñü")
     for tool in tools:
         line_one = tool.description.splitlines()[0]

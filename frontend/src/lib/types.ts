@@ -161,6 +161,8 @@ export interface Turn {
   applied: boolean;
   undone: boolean;
   created_at: number;
+  /** The narration audio kept for this turn (scene_narrate), if any. */
+  audio?: { file: string; voice: string; created_at: number } | null;
 }
 
 export interface DiceRollResult {

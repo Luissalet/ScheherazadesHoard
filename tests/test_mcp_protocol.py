@@ -72,7 +72,7 @@ def _text(result) -> str:
     return result.content[0].text
 
 
-async def test_list_tools_exposes_all_sixteen(live_app_url):
+async def test_list_tools_exposes_all_nineteen(live_app_url):
     async with stdio_client(_params(live_app_url)) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
@@ -82,7 +82,7 @@ async def test_list_tools_exposes_all_sixteen(live_app_url):
                 "story_worlds", "story_world_create", "world_context", "world_search",
                 "entity_get", "entity_upsert", "story_append", "dice_roll", "table_roll",
                 "thread_update", "clock_tick", "world_check", "session_export", "story_undo",
-                "session_start", "session_rename",
+                "session_start", "session_rename", "world_export", "world_import", "scene_narrate",
             }
             # every tool has annotations set, and read-only ones are honest about it
             by_name = {t.name: t for t in tools}
@@ -92,7 +92,7 @@ async def test_list_tools_exposes_all_sixteen(live_app_url):
             assert all(t.annotations.openWorldHint is False for t in tools)
             read_only = {n for n, t in by_name.items() if t.annotations.readOnlyHint}
             assert read_only == {"story_worlds", "world_context", "world_search", "entity_get",
-                                 "world_check", "session_export"}
+                                 "world_check", "session_export", "world_export"}
             for t in tools:
                 # Faustus picks tools by retrieval over descriptions, in
                 # English and Spanish: every tool needs a Keywords line.

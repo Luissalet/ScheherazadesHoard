@@ -928,6 +928,18 @@ def _decode_turn(row: dict) -> dict:
     return row
 
 
+def _with_audio(conn: sqlite3.Connection, turns: list[dict]) -> list[dict]:
+    """Attach `audio` ({file, voice, created_at} or None) to decoded turns."""
+    if not turns:
+        return turns
+    marks = ",".join("?" for _ in turns)
+    found = {r["turn_id"]: {"file": r["file"], "voice": r["voice"], "created_at": r["created_at"]}
+             for r in conn.execute(f"SELECT * FROM turn_audio WHERE turn_id IN ({marks})", [t["id"] for t in turns])}
+    for t in turns:
+        t["audio"] = found.get(t["id"])
+    return turns
+
+
 def append_turn(
     conn: sqlite3.Connection, world_id: str, session_id: str, role: str, author: str,
     text: str = "", rolls: Optional[list] = None, scene: Optional[dict] = None,
@@ -968,7 +980,7 @@ def list_turns(conn: sqlite3.Connection, session_id: str, limit: Optional[int] =
     rows = [_decode_turn(dict(r)) for r in conn.execute(q, params)]
     if limit:
         rows.reverse()
-    return rows
+    return _with_audio(conn, rows)
 
 
 def get_last_turn(conn: sqlite3.Connection, world_id: str, session_id: str) -> Optional[dict]:
@@ -1159,3 +1171,104 @@ def restore_entity_row(conn: sqlite3.Connection, entity_id: str, prev: dict, com
     _fts_upsert_entity(conn, e)
     if commit:
         conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Turn audio (scene_narrate)
+# ---------------------------------------------------------------------------
+
+def set_turn_audio(conn: sqlite3.Connection, turn_id: str, world_id: str, file: str,
+                   source_path: str = "", voice: str = "", commit: bool = True) -> dict:
+    """Remember the narration audio of a turn (replaces an earlier one)."""
+    conn.execute(
+        "INSERT INTO turn_audio (turn_id, world_id, file, source_path, voice, created_at) VALUES (?,?,?,?,?,?)"
+        " ON CONFLICT(turn_id) DO UPDATE SET file = excluded.file, source_path = excluded.source_path,"
+        " voice = excluded.voice, created_at = excluded.created_at",
+        (turn_id, world_id, file, source_path, voice, db.now()),
+    )
+    if commit:
+        conn.commit()
+    return get_turn_audio(conn, turn_id)  # type: ignore[return-value]
+
+
+def get_turn_audio(conn: sqlite3.Connection, turn_id: str) -> Optional[dict]:
+    row = conn.execute("SELECT * FROM turn_audio WHERE turn_id = ?", (turn_id,)).fetchone()
+    return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Family links (hoard.world/1 imports)
+# ---------------------------------------------------------------------------
+
+def get_link(conn: sqlite3.Connection, world_id: str, ref: str) -> Optional[dict]:
+    row = conn.execute("SELECT * FROM family_links WHERE world_id = ? AND ref = ?", (world_id, ref)).fetchone()
+    return dict(row) if row else None
+
+
+def put_link(conn: sqlite3.Connection, world_id: str, ref: str, kind: str, local_id: str,
+             source_revision: str, local_hash: str, commit: bool = True) -> None:
+    conn.execute(
+        "INSERT INTO family_links (world_id, ref, kind, local_id, source_revision, local_hash, imported_at)"
+        " VALUES (?,?,?,?,?,?,?) ON CONFLICT(world_id, ref) DO UPDATE SET kind = excluded.kind,"
+        " local_id = excluded.local_id, source_revision = excluded.source_revision,"
+        " local_hash = excluded.local_hash, imported_at = excluded.imported_at",
+        (world_id, ref, kind, local_id, source_revision, local_hash, db.now()),
+    )
+    if commit:
+        conn.commit()
+
+
+def links_for_local(conn: sqlite3.Connection, world_id: str, kind: str, local_id: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM family_links WHERE world_id = ? AND kind = ? AND local_id = ? ORDER BY imported_at",
+        (world_id, kind, local_id),
+    )
+    return [dict(r) for r in rows]
+
+
+def world_for_link(conn: sqlite3.Connection, ref: str) -> Optional[str]:
+    """The world a source document was imported into, if it ever was."""
+    row = conn.execute(
+        "SELECT world_id FROM family_links WHERE kind = 'world' AND ref = ? ORDER BY imported_at DESC LIMIT 1", (ref,)
+    ).fetchone()
+    return row["world_id"] if row else None
+
+
+def update_relation(conn: sqlite3.Connection, relation_id: str, commit: bool = True, **patch: Any) -> dict:
+    sets = [f"{k} = ?" for k in ("type", "note", "since") if patch.get(k) is not None]
+    if sets:
+        conn.execute(f"UPDATE relations SET {', '.join(sets)} WHERE id = ?",
+                     [patch[k] for k in ("type", "note", "since") if patch.get(k) is not None] + [relation_id])
+    if commit:
+        conn.commit()
+    return dict(conn.execute("SELECT * FROM relations WHERE id = ?", (relation_id,)).fetchone())
+
+
+def get_timeline_event(conn: sqlite3.Connection, event_id: str) -> Optional[dict]:
+    row = conn.execute("SELECT * FROM timeline_events WHERE id = ?", (event_id,)).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    d["entity_ids"] = db.loads(d.pop("entity_ids_json"), [])
+    return d
+
+
+def update_timeline_event(conn: sqlite3.Connection, event_id: str, commit: bool = True, **patch: Any) -> dict:
+    sets, values = [], []
+    for key in ("in_world_date", "summary"):
+        if patch.get(key) is not None:
+            sets.append(f"{key} = ?")
+            values.append(patch[key])
+    if patch.get("entity_ids") is not None:
+        sets.append("entity_ids_json = ?")
+        values.append(db.dumps(patch["entity_ids"]))
+    if sets:
+        conn.execute(f"UPDATE timeline_events SET {', '.join(sets)} WHERE id = ?", values + [event_id])
+    if commit:
+        conn.commit()
+    return get_timeline_event(conn, event_id)  # type: ignore[return-value]
+
+
+def get_relation(conn: sqlite3.Connection, relation_id: str) -> Optional[dict]:
+    row = conn.execute("SELECT * FROM relations WHERE id = ?", (relation_id,)).fetchone()
+    return dict(row) if row else None

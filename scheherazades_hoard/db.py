@@ -195,6 +195,32 @@ CREATE TABLE IF NOT EXISTS agent_calls (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_calls_created ON agent_calls(created_at DESC);
 
+-- Records that came from, or were sent to, another app (hoard.world/1): the
+-- other side's ref, its revision when we last took it, and the hash of our row
+-- at that moment, so a later import can tell "the source changed" from "we edited it".
+CREATE TABLE IF NOT EXISTS family_links (
+    world_id TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    ref TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    local_id TEXT NOT NULL,
+    source_revision TEXT NOT NULL DEFAULT '',
+    local_hash TEXT NOT NULL DEFAULT '',
+    imported_at REAL NOT NULL,
+    PRIMARY KEY (world_id, ref)
+);
+CREATE INDEX IF NOT EXISTS idx_family_links_local ON family_links(world_id, kind, local_id);
+CREATE INDEX IF NOT EXISTS idx_family_links_ref ON family_links(ref, kind);
+
+-- The audio of a narrated turn (scene_narrate): a copy in the data folder.
+CREATE TABLE IF NOT EXISTS turn_audio (
+    turn_id TEXT PRIMARY KEY REFERENCES turns(id) ON DELETE CASCADE,
+    world_id TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    file TEXT NOT NULL,
+    source_path TEXT NOT NULL DEFAULT '',
+    voice TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

@@ -121,6 +121,11 @@ export const api = {
   illustrate: (world: string, scene_brief: string, location_name = "", mood = "") =>
     post<{ image_url: string }>(`/api/worlds/${world}/illustrate`, { scene_brief, location_name, mood }),
 
+  narrationAvailable: () => get<{ available: boolean }>("/api/narration/available"),
+  narrateTurn: (session_id: string, turn: string) =>
+    agent<{ ok: boolean; turn_id: string; audio_url: string; path: string }>("scene_narrate", { session_id, turn }),
+  turnAudioUrl: (turnId: string) => `/api/turns/${encodeURIComponent(turnId)}/audio`,
+
   agentCalls: (limit = 50) => get<AgentCall[]>(`/api/agent_calls?limit=${limit}`),
 };
 

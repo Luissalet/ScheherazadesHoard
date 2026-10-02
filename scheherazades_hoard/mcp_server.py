@@ -342,6 +342,53 @@ async def session_export(
     })
 
 
+@mcp.tool(annotations=_ann(read_only=True, idempotent=True))
+async def world_export(world_id: str) -> dict:
+    """Export world as JSON / exportar el mundo, pasar personajes y lugares a otra app.
+
+    The world's characters, places, factions, other things (items, lore,
+    creatures), relations and timeline events as one neutral hoard.world/1
+    document, each with a `ref` and a `revision`, for another app (Writer's
+    codex, for one) to read. Never carries secrets, images, facts, threads,
+    clocks or sessions. `world_id` is the id or exact name.
+
+    Keywords: export world, world json, share world, send characters to writer, exportar mundo, pasar personajes a Writer, enviar el mundo, compartir mundo
+    """
+    return await _call("world_export", {"world_id": world_id})
+
+
+@mcp.tool(annotations=_ann(read_only=False, idempotent=True))
+async def world_import(data: dict, world_id: Optional[str] = None) -> dict:
+    """Import world JSON / importar, trae el mundo, personajes y lugares de otra app (Writer).
+
+    Merges a hoard.world/1 document (`data`, as `world_export` or another
+    app produces it) into `world_id`, or into the world it was imported into
+    before, or into a new world. Safe to repeat: new records are created,
+    unchanged ones are skipped, a record edited here is never overwritten
+    (reported as local_modified), an existing name is linked instead of
+    duplicated, and nothing is ever deleted. Returns counts per state and
+    the first 100 records with their state.
+
+    Keywords: import world, merge world, bring characters from writer, importar mundo, traer personajes de Writer, traer el mundo, fusionar mundo
+    """
+    return await _call("world_import", {"data": data, "world_id": world_id})
+
+
+@mcp.tool(annotations=_ann(read_only=False, idempotent=False))  # reaches another local app, never the internet
+async def scene_narrate(session_id: str, turn: Optional[str] = None, voice: Optional[str] = None, lang: Optional[str] = None) -> dict:
+    """Narrate aloud / narrar en voz alta la escena, leer el turno, audio de la narración.
+
+    Reads one turn of a session (`session_id`; `turn` is its index or id,
+    default the last narration, dialogue or action) with Prospero's voice
+    through the hub, keeps the audio file with the turn and returns its
+    `path` and `audio_url`. Needs the hub and Prospero's Hoard running;
+    fails with voice_unavailable otherwise. `voice` and `lang` are optional.
+
+    Keywords: narrate, read aloud, text to speech, narration audio, narrar escena, leer en voz alta, audio de la escena, voz del narrador
+    """
+    return await _call("scene_narrate", {"session_id": session_id, "turn": turn, "voice": voice, "lang": lang})
+
+
 @mcp.tool(annotations=_ann(read_only=False, idempotent=False))
 async def story_undo(world: str) -> dict:
     """Undo / deshacer último turno, revertir, volver atrás.
