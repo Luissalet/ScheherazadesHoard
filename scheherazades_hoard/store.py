@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import re
 import sqlite3
-import unicodedata
 from typing import Any, Optional
 
 from . import db
+from .hoard_link.docs import textsearch
+from .hoard_link.text import fold
 
 
 class NotFound(KeyError):
@@ -21,14 +22,8 @@ class NotFound(KeyError):
         return str(self.args[0]) if self.args else "not found"
 
 
-def _strip_accents(text: str) -> str:
-    return "".join(
-        c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)
-    )
-
-
 def _norm(text: str) -> str:
-    return _strip_accents(text).strip().lower()
+    return fold(text).strip()
 
 
 def _next_seq(conn: sqlite3.Connection, table: str, world_id: str) -> int:
@@ -547,11 +542,9 @@ def search_facts(conn: sqlite3.Connection, world_id: str, query: str, limit: int
 
 
 def _fts_query(text: str) -> str:
-    """Build a safe FTS5 MATCH query: OR of the individual terms, quoted."""
-    terms = [t for t in text.replace('"', " ").split() if t]
-    if not terms:
-        return '""'
-    return " OR ".join(f'"{t}"' for t in terms)
+    """A safe FTS5 MATCH query from the shared text search: any content word of the question, stopwords dropped,
+    longer words as prefixes of their stem. Nothing searchable matches nothing."""
+    return textsearch.fts_query(text, mode="or") or '""'
 
 
 # ---------------------------------------------------------------------------

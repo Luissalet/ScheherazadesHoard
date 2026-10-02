@@ -19,10 +19,10 @@ missed contradiction) are expected and documented as a boundary.
 from __future__ import annotations
 
 import re
-import unicodedata
 from typing import Any, Awaitable, Callable, Optional
 
 from . import jsonx, store
+from .hoard_link.text import fold as _fold
 
 DEAD_STATUSES = {"dead", "destroyed", "missing"}
 
@@ -38,12 +38,6 @@ _OPPOSITES = {
     "aliado de": {"enemigo de"}, "enemigo de": {"aliado de"},
     "confia en": {"traiciona a"}, "traiciona a": {"confia en"},
 }
-
-
-def _fold(text: str) -> str:
-    return "".join(
-        c for c in unicodedata.normalize("NFKD", text or "") if not unicodedata.combining(c)
-    ).lower()
 
 
 def _mentions(statement_folded: str, name: str) -> bool:

@@ -12,20 +12,14 @@ No FastAPI imports; operates purely against the store.
 """
 from __future__ import annotations
 
-import unicodedata
 from typing import Any, Optional
 
 from . import store
+from .hoard_link.text import fold as _fold
 
 DEFAULT_BUDGET = 3000
 MIN_BUDGET = 200
 MAX_BUDGET = 20000
-
-
-def _fold(text: str) -> str:
-    return "".join(
-        c for c in unicodedata.normalize("NFKD", text or "") if not unicodedata.combining(c)
-    ).lower()
 
 
 def _truncate(text: str, n: int) -> str:
