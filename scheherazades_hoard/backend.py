@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from .hoard_link import BackendError, ChatResult, Link, LinkConfig, Resolution, Unavailable
+from .hoard_link.atomic import write_json_atomic
 
 __all__ = [
     "APP", "BackendError", "ChatResult", "Link", "LinkConfig", "Resolution", "Unavailable",
@@ -90,9 +91,8 @@ def apply_settings(path: Path, patch: Mapping[str, Any]) -> dict[str, Any]:
         data["faustus"] = faustus
     else:
         data.pop("faustus", None)
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Atomic (temp file + replace): a crash mid-write leaves the previous backend.json, never half of one.
+    write_json_atomic(Path(path), data)
     return data
 
 

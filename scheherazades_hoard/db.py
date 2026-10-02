@@ -237,10 +237,16 @@ def now() -> float:
     return time.time()
 
 
+BUSY_TIMEOUT_S = 15.0
+
+
 def connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path), check_same_thread=False)
+    # A busy timeout so a second process (the hub's online backup, Faustus reading) waits instead of failing with
+    # "database is locked".
+    conn = sqlite3.connect(str(db_path), timeout=BUSY_TIMEOUT_S, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute(f"PRAGMA busy_timeout={int(BUSY_TIMEOUT_S * 1000)}")
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(_SCHEMA)
