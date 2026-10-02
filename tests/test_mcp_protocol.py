@@ -39,9 +39,13 @@ class _ServerThread(threading.Thread):
         self.server.should_exit = True
 
 
+_DATA_DIRS: list = []
+
+
 @pytest.fixture(scope="module")
 def live_app_url(tmp_path_factory):
     data_dir = tmp_path_factory.mktemp("mcp_live")
+    _DATA_DIRS.append(data_dir)
     app = create_app(data_dir, port=PORT)
     thread = _ServerThread(app, PORT)
     thread.start()
@@ -56,15 +60,17 @@ def live_app_url(tmp_path_factory):
     else:
         raise RuntimeError("app did not start in time")
     yield f"http://127.0.0.1:{PORT}"
+    _DATA_DIRS.clear()
     thread.stop()
     thread.join(timeout=5)
 
 
 def _params(url: str) -> StdioServerParameters:
+    # The adapter reads the app's bearer token from its data folder, as it does under Faustus.
     return StdioServerParameters(
         command=sys.executable,
         args=[str(MCP_SERVER_PATH)],
-        env={**os.environ, "SCHEHERAZADE_URL": url},
+        env={**os.environ, "SCHEHERAZADE_URL": url, "SCHEHERAZADE_DATA_DIR": str(_DATA_DIRS[0])},
     )
 
 

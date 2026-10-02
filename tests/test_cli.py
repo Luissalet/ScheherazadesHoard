@@ -64,7 +64,9 @@ def test_demo_start_serves_health_writes_pid_and_logs(tmp_path):
         # child: the file then holds the child, which is the one that owns the port.
         assert written == proc.pid or _parent_pid(written) == proc.pid, (written, proc.pid)
         assert (data / "logs" / "app.log").is_file()
-        worlds = httpx.post(f"http://127.0.0.1:{PORT}/api/agent/story_worlds", json={}, trust_env=False).json()
+        token = (data / "mcp-token").read_text(encoding="utf-8").strip()
+        worlds = httpx.post(f"http://127.0.0.1:{PORT}/api/agent/story_worlds", json={}, trust_env=False,
+                            headers={"Authorization": f"Bearer {token}"}).json()
         assert worlds[0]["name"] == "El Archipiélago de Sal"
     finally:
         proc.terminate()

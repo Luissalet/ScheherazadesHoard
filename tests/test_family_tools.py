@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from agent_auth import agent_headers
 from scheherazades_hoard.api import create_app
 
 PORT = 18861
@@ -42,7 +43,7 @@ def wav(tmp_path):
 
 def make_client(tmp_path, hub):
     app = create_app(tmp_path / "data", port=PORT, hub=hub)
-    return TestClient(app, base_url=f"http://127.0.0.1:{PORT}")
+    return TestClient(app, base_url=f"http://127.0.0.1:{PORT}", headers=agent_headers(app))
 
 
 @pytest.fixture()

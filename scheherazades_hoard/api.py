@@ -23,7 +23,8 @@ from pydantic import BaseModel, Field
 
 from . import __version__, backend, consistency, context as context_mod
 from . import db, delta as delta_mod, dice, exchange, export, hub_bridge, narration, narrator, prospero, store, tables, views
-from .hoard_link import family
+from .hoard_link import family, tokens
+from .hoard_link.guard import install_guard
 
 SERVICE = "scheherazades-hoard"
 DISPLAY_NAME = "Scheherazade's Hoard"
@@ -38,6 +39,8 @@ log = logging.getLogger("scheherazades_hoard")
 # so the human's own clicks never show up as the model's actions.
 UI_CLIENT_HEADER = "x-hoard-client"
 _caller: contextvars.ContextVar[str] = contextvars.ContextVar("caller", default="agent")
+# These two answer for themselves: /tools is a read of the catalogue, /call checks the bearer token itself.
+AGENT_OPEN_PATHS = frozenset({"/api/agent/tools", "/api/agent/call"})
 
 
 # ---------------------------------------------------------------------------
@@ -331,31 +334,26 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     app.state.backend_json = backend_json
 
     # -- browser-attack guard (DNS rebinding + basic CSRF), all routes -----
+    # Registered first so it is the inner layer: the shared guard (loopback Host, Origin and Fetch Metadata rules;
+    # SCHEHERAZADE_ALLOWED_HOSTS opens a LAN name or a tailnet) runs before it. strict_ports keeps the old rule that
+    # the Host names this app's own port.
+    token_file = data_dir / "mcp-token"
+    tokens.read_or_create_token(token_file)
+
     @app.middleware("http")
-    async def guard(request: Request, call_next):
-        host = request.headers.get("host", "")
-        hostname = host.split(":")[0]
-        allowed_hostnames = {"127.0.0.1", "localhost"}
-        expected_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
-        if hostname not in allowed_hostnames or host not in expected_hosts:
+    async def caller_and_headers(request: Request, call_next):
+        ui = request.headers.get(UI_CLIENT_HEADER) == "ui"
+        _caller.set("ui" if ui else "agent")
+        path = request.url.path
+        # The per-tool routes run the assistant's tools: anything that is not the app's own UI (marked with
+        # X-Hoard-Client: ui, which a web page cannot send cross-origin) needs the bearer token of POST
+        # /api/agent/call, which the MCP adapter sends. /api/agent/tools and /call do their own checks.
+        if (not ui and path.startswith("/api/agent/") and path not in AGENT_OPEN_PATHS
+                and not tokens.check_bearer(request.headers.get("authorization"), tokens.read_token(token_file) or "")):
             return JSONResponse(
-                {"error": "forbidden_host", "message": f"unexpected Host header: {host!r}"},
-                status_code=403,
+                {"error": "unauthorized", "message": "Missing or invalid MCP token (see data/mcp-token)."},
+                status_code=401,
             )
-        if request.method not in ("GET", "HEAD", "OPTIONS"):
-            origin = request.headers.get("origin")
-            own_origins = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
-            if origin and origin not in own_origins:
-                return JSONResponse(
-                    {"error": "forbidden_origin", "message": f"unexpected Origin header: {origin!r}"},
-                    status_code=403,
-                )
-            if request.headers.get("sec-fetch-site") == "cross-site":
-                return JSONResponse(
-                    {"error": "forbidden_cross_site", "message": "cross-site request rejected"},
-                    status_code=403,
-                )
-        _caller.set("ui" if request.headers.get(UI_CLIENT_HEADER) == "ui" else "agent")
         response = await call_next(request)
         # Clickjacking: only this app and other loopback apps (Faustus) may
         # frame the UI, so a web page cannot overlay it and steal clicks.
@@ -365,6 +363,8 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         return response
+
+    install_guard(app, port_getter=lambda: port, allowed_env="SCHEHERAZADE_ALLOWED_HOSTS", strict_ports=True)
 
     def C() -> Any:
         return app.state.conn

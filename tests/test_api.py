@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from agent_auth import agent_headers
 from scheherazades_hoard.api import create_app
 
 PORT = 18860
@@ -13,7 +14,7 @@ PORT = 18860
 @pytest.fixture()
 def client(tmp_path):
     app = create_app(tmp_path / "data", port=PORT)
-    with TestClient(app, base_url=f"http://127.0.0.1:{PORT}") as c:
+    with TestClient(app, base_url=f"http://127.0.0.1:{PORT}", headers=agent_headers(app)) as c:
         yield c
 
 
@@ -40,7 +41,7 @@ def test_health(client):
 def test_guard_rejects_unknown_host(client):
     r = client.get("/api/health", headers={"Host": "evil.example.com"})
     assert r.status_code == 403
-    assert r.json()["error"] == "forbidden_host"
+    assert r.json()["error"] == "Only local access is allowed."
 
 
 def test_guard_accepts_localhost_alias(client):
@@ -51,13 +52,13 @@ def test_guard_accepts_localhost_alias(client):
 def test_guard_rejects_cross_origin_post(client):
     r = client.post("/api/agent/story_world_create", json={"name": "X"}, headers={"Origin": "http://evil.example.com"})
     assert r.status_code == 403
-    assert r.json()["error"] == "forbidden_origin"
+    assert "Origin" in r.json()["error"]
 
 
 def test_guard_rejects_cross_site_fetch_metadata(client):
     r = client.post("/api/agent/story_world_create", json={"name": "X"}, headers={"Sec-Fetch-Site": "cross-site"})
     assert r.status_code == 403
-    assert r.json()["error"] == "forbidden_cross_site"
+    assert r.json()["error"] == "Cross-site requests are not allowed."
 
 
 def test_guard_allows_same_origin_post(client):
@@ -68,11 +69,12 @@ def test_guard_allows_same_origin_post(client):
     assert r.status_code == 200
 
 
-def test_guard_allows_plain_get_navigation_from_any_tab(client):
-    # GET must keep working even with a foreign-looking Sec-Fetch-Site,
-    # since a browser tab navigating to the app sends one.
-    r = client.get("/api/health", headers={"Sec-Fetch-Site": "cross-site"})
-    assert r.status_code == 200
+def test_guard_allows_top_level_navigation_from_any_tab(client):
+    # A browser tab navigating to the app from another site sends Sec-Fetch-Site: cross-site with mode navigate;
+    # that must keep working. A cross-site fetch() of the same URL (the shared guard's stricter rule) does not.
+    nav = {"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}
+    assert client.get("/api/health", headers=nav).status_code == 200
+    assert client.get("/api/health", headers={"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "cors"}).status_code == 403
 
 
 # --- worlds ------------------------------------------------------------

@@ -13,6 +13,7 @@ transport and error translation.
 """
 import logging
 import os
+from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -42,6 +43,28 @@ def _resolve_app_url() -> str:
 
 APP_URL = _resolve_app_url()
 
+
+def _token_file() -> Path:
+    """``$SCHEHERAZADE_TOKEN_FILE``, else ``<$SCHEHERAZADE_DATA_DIR or the repo's data folder>/mcp-token``
+    (what the app writes)."""
+    explicit = os.environ.get("SCHEHERAZADE_TOKEN_FILE", "").strip()
+    if explicit:
+        return Path(explicit)
+    data = os.environ.get("SCHEHERAZADE_DATA_DIR", "").strip()
+    return (Path(data) if data else Path(__file__).resolve().parent.parent / "data") / "mcp-token"
+
+
+def _token() -> str:
+    """The bearer token the app requires on /api/agent/<tool>: ``$SCHEHERAZADE_TOKEN`` or the token file, read on
+    every call (the app may have created it after this adapter started)."""
+    given = os.environ.get("SCHEHERAZADE_TOKEN", "").strip()
+    if given:
+        return given
+    try:
+        return _token_file().read_text(encoding="utf-8-sig").strip()
+    except OSError:
+        return ""
+
 mcp = FastMCP(
     APP_NAME,
     instructions=(
@@ -61,11 +84,18 @@ async def _call(path: str, payload: dict[str, Any]) -> Any:
         # trust_env=False: a system HTTP proxy must never sit between this
         # adapter and an app on loopback.
         async with httpx.AsyncClient(timeout=120.0, trust_env=False) as client:
-            r = await client.post(f"{APP_URL}/api/agent/{path}", json=payload)
+            token = _token()
+            r = await client.post(f"{APP_URL}/api/agent/{path}", json=payload,
+                                  headers={"Authorization": f"Bearer {token}"} if token else {})
     except httpx.HTTPError as e:
         raise ToolError(
             f"{SLUG}_unavailable: {APP_NAME} is not running. "
             f"Start it from Faustus (Apps) or with 'Iniciar Scheherazade's Hoard.cmd', then retry. ({type(e).__name__})"
+        )
+    if r.status_code == 401:
+        raise ToolError(
+            f"{SLUG}_unauthorized: {APP_NAME} refused this adapter's token; it reads {_token_file()} "
+            "(set SCHEHERAZADE_DATA_DIR / SCHEHERAZADE_TOKEN_FILE if the app uses another data folder)."
         )
     if r.status_code >= 400:
         try:
