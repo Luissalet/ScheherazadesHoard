@@ -42,6 +42,13 @@ Reglas para agentes de codificación que trabajen en este repositorio.
   sustituye la carpeta entera y se anota la versión en `VENDORED.txt`) y
   `backend.py` es su envoltorio. Si necesitas un modelo, resuélvelo por
   ahí.
+- **Lo común viene de Hoard Link, no se reescribe aquí:** el guardián de
+  peticiones (`install_guard`), los tokens (`tokens`), la escritura atómica
+  (`atomic`), el plegado de tildes (`text.fold`) y las consultas FTS
+  (`docs.textsearch`). Las rutas `/api/agent/<herramienta>` exigen el token
+  de `data/mcp-token` salvo la marca `X-Hoard-Client: ui` de la propia
+  interfaz; el adaptador MCP lo lee de `SCHEHERAZADE_TOKEN`,
+  `SCHEHERAZADE_TOKEN_FILE` o `SCHEHERAZADE_DATA_DIR`.
 - **Las herramientas del agente devuelven vistas compactas** (`views.py`):
   ids estables, textos cortos y nunca secretos salvo `include_secrets`.
   No devuelvas filas completas de la base de datos por `/api/agent/*`.

@@ -166,7 +166,10 @@ explicit settings from the Settings screen or `HOARD_*` environment
 variables first, then the model Faustus already uses, then resident
 models on loopback (llama.cpp, Ollama, any OpenAI-compatible server).
 When nothing answers, Settings says why and everything except
-"Narrate", "Polish" and the continuity judge keeps working.
+"Narrate", "Polish" and the continuity judge keeps working. The same
+vendored library also provides the request guard, the bearer tokens, the
+atomic write of `backend.json`, the accent-folding and the FTS query
+builder used by the world search.
 
 ## Architecture
 
@@ -211,7 +214,7 @@ delta), scene carry-over, JSON extraction including the sloppy shapes a
 small model sends, first-name entity lookup, the consistency rules,
 accent-insensitive and status search, the manuscript-clean chapter,
 exports and import, the static file server
-against path traversal, the Host/Origin guard, the CLI start with its pid
+against path traversal, the shared request guard and the token on the tool routes, atomic settings, the CLI start with its pid
 file and log, and an MCP protocol test that spawns the real adapter over
 stdio against a live instance (`list_tools`, annotations, Keywords lines,
 and a create, roll, append, context and undo round trip), plus a check
@@ -224,7 +227,10 @@ TypeScript strict mode, `noUnusedLocals` and `noUnusedParameters` on.
 ## Privacy and security
 
 - Binds `127.0.0.1` only, rejects other Host headers and cross-site
-  writes, and refuses to be framed by web pages. No telemetry. The only
+  writes (the shared Hoard Link guard; `SCHEHERAZADE_ALLOWED_HOSTS` opens
+  a LAN or tailnet name on purpose), asks the assistant's tool routes
+  for the bearer token in `data/mcp-token`, and refuses to be framed by
+  web pages. No telemetry. The only
   network calls are to model servers on your machine (or the Faustus you
   configured) and to Prospero's Hoard, both on loopback.
 - Your worlds live in `data/` (gitignored) as one SQLite file; the log is

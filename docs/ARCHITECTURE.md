@@ -31,7 +31,7 @@ the app's own venv would use for its dependencies.
 
 | Module | Responsibility |
 | --- | --- |
-| `db.py` | SQLite schema (WAL mode), FTS5 virtual tables over entities and facts (`unicode61 remove_diacritics 2`, for accent-insensitive Spanish search), `connect()` / `new_id()` / `now()` / json helpers. |
+| `db.py` | SQLite schema (WAL mode), FTS5 virtual tables over entities and facts (`unicode61 remove_diacritics 2`, for accent-insensitive Spanish search), `connect()` (15 s busy timeout, so a second process waits instead of failing with "database is locked") / `new_id()` / `now()` / json helpers. |
 | `views.py` | The compact, secret-free shapes the agent tools return (entity/fact/thread/clock/world briefs, relations seen from one entity, what a delta applied, a scene as refs and names). The UI keeps using the richer REST endpoints. |
 | `store.py` | CRUD for every domain object (worlds, entities, relations, facts, timeline events, threads, clocks, tables, sessions, turns, dice log, agent calls). Every mutating function takes `commit: bool = True` so callers that need atomicity across several writes (see `delta.py`) can defer the commit to one enclosing transaction. |
 | `dice.py` | The dice grammar: `NdM`, `+/-` constants, `kh/kl`/`dh/dl` (keep/drop highest/lowest), exploding `!`, `adv(d20)`/`dis(d20)`, `dF` fate dice, plus `check(dc, mod)` (d20, crit on natural 20/1) and `move(stat)` (2d6, 6-/7-9/10+ bands). Pure functions, no I/O; `secrets.SystemRandom` unless a `seed` is given, in which case the roll uses `random.Random(seed)` and the seed is recorded so it is reproducible. |
@@ -41,15 +41,15 @@ the app's own venv would use for its dependencies.
 | `consistency.py` | `world_check()` — lexical retrieval of candidate facts plus three concrete rules (dead-but-acting, location mismatch, contradicted relation), and an optional LLM-judge pass over the same candidates that must cite real fact ids. |
 | `jsonx.py` | Robust JSON extraction from free-form model text: fenced code blocks, balanced-brace bare-object extraction, trailing-comma repair. Never raises — callers get `None` and treat the narration as `unparsed` instead. |
 | `export.py` | Session → Markdown chapter (the API offers an optional polish by the shared model, which falls back to the plain chapter with the reason), world bible → Markdown (one section per entity kind), and full JSON export/import (format tag `scheherazades-hoard-world-export`), sessions and turns included; undo snapshots are not carried over, so no imported session becomes current. |
-| `hoard_link/` | Hoard Link, the shared model-backend resolver, vendored unmodified (`VENDORED.txt` names the public source and version). |
-| `backend.py` | This app's thin wrapper over Hoard Link (see below). |
+| `hoard_link/` | Hoard Link 0.8, the shared commons, vendored unmodified (`VENDORED.txt` names the public source and version): the model backend, the request guard, the bearer tokens, atomic writes, the text fold and the FTS query builder this app uses. |
+| `backend.py` | This app's thin wrapper over Hoard Link (see below); `backend.json` is written atomically (`hoard_link.atomic`). |
 | `narrator.py` | Standalone-mode narration: builds the system/user prompt from `world_context()` plus the player's action, calls the backend, and splits the model's reply into narration prose and a delta with `jsonx`. |
 | `prospero.py` | Optional illustration adapter — checks `127.0.0.1:8815/api/health`, finds or creates a Prospero project named for the world, waits for the image job and returns the asset file URL. It fails closed (returns `False`/`None`) on any error so this feature never blocks the rest of the app. |
 | `exchange.py` | `hoard.world/1` (see `WORLD_SCHEMA.md`): `export_world()` builds the neutral document (refs, revisions, never secrets or images); `import_world()` merges one into a world in a single transaction, keyed by ref and revision through the `family_links` table, never deleting and never overwriting a record whose hash differs from what was imported. No FastAPI. |
 | `narration.py` | `scene_narrate` support: which turn to read, the text, and copying the audio file another app reports into `<data>/audio/` (the UI plays the copy; the other app's path is only read). |
 | `hub_bridge.py` | `Hub`: the optional calls to other family apps through the hub (a tool call, a ref link, "is Prospero running"); never raises. `create_app(hub=...)` takes a stand-in in tests. |
 | `demo.py` | `seed_demo_world()` — idempotent synthetic world ("El Archipiélago de Sal": 14 entities, 5 characters with secrets, 7 relations, 6 facts, 2 timeline events, 3 threads, 2 clocks, 2 tables, one 13-turn session recorded through `record_turn()` with two seeded, logged 2d6 moves), used by `--demo` and by the screenshots script. |
-| `api.py` | `create_app()` — FastAPI app: the browser-attack guard middleware, exception handlers, every `/api/agent/<tool>` endpoint (exactly what the MCP adapter calls), the richer UI CRUD endpoints, and static-file serving for the SPA. |
+| `api.py` | `create_app()` — FastAPI app: the shared browser-attack guard (`hoard_link.guard.install_guard`), the bearer-token check on the per-tool routes, exception handlers, every `/api/agent/<tool>` endpoint (exactly what the MCP adapter calls), the richer UI CRUD endpoints, and static-file serving for the SPA. |
 | `mcp_server.py` | The standalone stdio MCP adapter described in `docs/MCP.md`. |
 | `__main__.py` | CLI entry point (`--port`, `--data-dir`, `--demo`, `--no-browser`). |
 
@@ -94,12 +94,19 @@ rest of the app does not need a model.
 
 ## HTTP API
 
-- Every route is guarded by a middleware that rejects requests whose
-  `Host` header is not `127.0.0.1:<port>` / `localhost:<port>` (DNS
-  rebinding), and, for any non-GET/HEAD/OPTIONS request, rejects a
-  present `Origin` that is not the app's own origin or a
-  `Sec-Fetch-Site: cross-site` header. There is no CORS layer — this is a
-  local, single-origin app.
+- Every route sits behind Hoard Link's shared guard (`install_guard`,
+  strict ports): a request whose `Host` is not `127.0.0.1:<port>` /
+  `localhost:<port>` (DNS rebinding, unless the name is listed in
+  `SCHEHERAZADE_ALLOWED_HOSTS`) gets `403 {"error": "<sentence>"}`; a
+  non-GET/HEAD/OPTIONS request with a foreign `Origin`, or any
+  cross-site request that is not a top-level navigation, is refused the
+  same way. There is no CORS layer — this is a local, single-origin app.
+- The per-tool routes `/api/agent/<tool>` need the bearer token in
+  `data/mcp-token` (the same one `POST /api/agent/call` checks; the MCP
+  adapter reads it from `SCHEHERAZADE_TOKEN`, `SCHEHERAZADE_TOKEN_FILE` or
+  `<SCHEHERAZADE_DATA_DIR or the repo's data>/mcp-token`) unless the
+  request carries the UI's `X-Hoard-Client: ui` marker, which a web page
+  cannot send cross-origin. Without either: `401 {"error": "unauthorized"}`.
 - `/api/agent/<tool>` (POST JSON) is the agent surface: one endpoint per
   MCP tool, returning exactly what that tool returns, so the same
   `TestClient`-tested logic backs both the UI (which calls these same

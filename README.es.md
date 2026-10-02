@@ -175,7 +175,9 @@ de entorno `HOARD_*`, luego el modelo que ya usa Faustus y después los
 modelos cargados en local (llama.cpp, Ollama o cualquier servidor
 compatible con OpenAI). Si no responde ninguno, Ajustes explica por qué
 y todo sigue funcionando salvo «Narrar», el pulido y el juez de
-coherencia.
+coherencia. La misma biblioteca incluida aporta el guardián de peticiones,
+los tokens, la escritura atómica de `backend.json`, el plegado de tildes y
+el constructor de consultas FTS de la búsqueda del mundo.
 
 ## Arquitectura
 
@@ -221,7 +223,7 @@ en un delta), la continuidad de la escena, la extracción de JSON
 entidades por nombre de pila, las reglas de coherencia, la búsqueda sin
 tildes y por estado, el capítulo listo para el manuscrito, la exportación
 e importación, el servidor de archivos estáticos frente a recorridos de
-ruta, la protección de Host/Origin, el arranque por línea de comandos con
+ruta, la protección compartida de peticiones y el token de las rutas de herramientas, los ajustes atómicos, el arranque por línea de comandos con
 su archivo de pid y su log, y una prueba del protocolo MCP que lanza el
 adaptador real por stdio contra una instancia en marcha (`list_tools`,
 anotaciones, líneas Keywords y un ciclo de crear, tirar, registrar,
@@ -236,7 +238,10 @@ activados.
 ## Privacidad y seguridad
 
 - Solo escucha en `127.0.0.1`, rechaza otras cabeceras Host y las
-  escrituras desde otros sitios, y no se deja incrustar en páginas web.
+  escrituras desde otros sitios (el guardián compartido de Hoard Link;
+  `SCHEHERAZADE_ALLOWED_HOSTS` abre a propósito un nombre de red local o
+  de tailnet), pide a las rutas de herramientas del asistente el token de
+  `data/mcp-token` y no se deja incrustar en páginas web.
   Sin telemetría. Las únicas llamadas de red van a servidores de modelos
   de tu equipo (o al Faustus que hayas configurado) y a Prospero's Hoard,
   siempre por loopback.

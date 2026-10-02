@@ -25,6 +25,10 @@ client over stdio:
 - The adapter imports only the standard library, `httpx` and `mcp`, and
   refuses a non-loopback `SCHEHERAZADE_URL`. It ignores system HTTP
   proxies for its loopback calls.
+- It authenticates with the app's bearer token: `SCHEHERAZADE_TOKEN`, else
+  the file named by `SCHEHERAZADE_TOKEN_FILE`, else `mcp-token` in
+  `SCHEHERAZADE_DATA_DIR` (default: the repo's `data` folder, where the app
+  writes it). A refused token arrives as `scheherazades-hoard_unauthorized`.
 - App not running: every tool fails with
   `scheherazades-hoard_unavailable: Scheherazade's Hoard is not running. Start it from Faustus (Apps) or with 'Iniciar Scheherazade's Hoard.cmd', then retry.`
 - Any other error arrives as `<error_code>: <message>`, for example
