@@ -22,6 +22,8 @@ def world(conn):
 
 def _link_with_content(content: str) -> Link:
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"status": "ok"})
         if request.url.path == "/props":
             return httpx.Response(200, json={"model_path": "/m.gguf"})
         if request.url.path == "/slots":
