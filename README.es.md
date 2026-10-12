@@ -119,6 +119,16 @@ macOS el intérprete es `.venv/bin/python`):
 }
 ```
 
+## Asistente de Faustus
+
+Con el lanzador compartido de Hoard Link instalado, la app muestra el panel de Faustus de la familia (un botón flotante). La conversación, el modelo y las herramientas viven en Faustus; esta app solo le dice al panel qué hay abierto.
+
+- **Contexto por vista.** El panel recibe la sección y los objetos abiertos en ella, con ids reales: `world` (género, tono, sistema de reglas, idioma, premisa cortada a 240 caracteres), `entity` (tipo, estado, alias, etiquetas, resumen cortado a 240; siempre leída sin los secretos del director de juego), `session`, hasta 8 `thread` abiertas o avanzadas, hasta 6 `clock` y, en la partida, el lugar de la escena y hasta 8 entidades presentes. Los formularios de creación (`new`) no dan objeto.
+- **Campos sin guardar.** El panel los pide con el evento de ventana `scheherazade:context-request`. Los formularios `scene-form`, `entity-form`, `session-form`, `turn-draft`, `entity-new`, `world-new`, `session-new`, `thread-new`, `clock-new`, `table-new` y `timeline-new` responden con lo escrito hasta ahora. Los secretos se quitan de toda instantánea, sea cual sea el contenido del formulario.
+- **Refresco.** Cuando el asistente termina un turno, la vista abierta se recarga en el sitio (`hoard:copilot-turn-end` / `window.hoardCopilot.onTurnEnd`) y los formularios que estás editando conservan lo escrito.
+- **Guardado.** Los formularios envían solo los campos que has cambiado. `PATCH /api/worlds/{id}/entities/{ref}` deja intacto todo campo que no se envía, borra el que se envía vacío, y `fields_patch` fusiona claves sueltas en los `fields` de la entidad; las actualizaciones de mundo y de sesión se comportan igual. Los secretos solo viajan cuando el editor los muestra.
+- **Pruebas.** `node --test frontend/copilot-context.test.mjs` y `python -m pytest tests/test_partial_updates.py tests/test_frontend_source.py`.
+
 ## Inicio rápido
 
 ### Windows

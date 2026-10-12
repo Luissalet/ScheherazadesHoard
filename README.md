@@ -112,6 +112,16 @@ interpreter is `.venv/bin/python`):
 }
 ```
 
+## Faustus assistant
+
+Once the shared Hoard Link launcher is installed, the app shows the family's Faustus panel (a floating button). The conversation, the model and the tools live in Faustus; this app only tells the panel what is open.
+
+- **Context per view.** The panel receives the section and the objects open in it, with real ids: `world` (genre, tone, ruleset, language, premise cut to 240 characters), `entity` (kind, status, aliases, tags, summary cut to 240; always read without the game master's secrets), `session`, up to 8 open or advanced `thread` objects, up to 6 `clock` objects and, in play, the scene's location and up to 8 entities present. Creation forms (`new`) give no object.
+- **Unsaved fields.** The panel asks for them with the `scheherazade:context-request` window event. The forms `scene-form`, `entity-form`, `session-form`, `turn-draft`, `entity-new`, `world-new`, `session-new`, `thread-new`, `clock-new`, `table-new` and `timeline-new` answer with the fields typed so far. Secrets are stripped from every snapshot, whatever the form holds.
+- **Refresh.** When the assistant finishes a turn the open view reloads in place (`hoard:copilot-turn-end` / `window.hoardCopilot.onTurnEnd`) and the forms you are editing keep what you typed.
+- **Saving.** Forms send only the fields you changed. `PATCH /api/worlds/{id}/entities/{ref}` leaves every field that is not sent untouched, clears one sent empty, and `fields_patch` merges single keys into the entity's `fields`; world and session updates behave the same. The secrets travel only when the editor shows them.
+- **Tests.** `node --test frontend/copilot-context.test.mjs` and `python -m pytest tests/test_partial_updates.py tests/test_frontend_source.py`.
+
 ## Quick start
 
 ### Windows
