@@ -114,3 +114,25 @@ test("context() reads the current view and the open forms", async () => {
   assert.equal(ctx.view.page, "play");
   assert.deepEqual(ctx.view.editor.fields, { mood: "calm" });
 });
+
+test("navigating while the world loads does not mix two views in one context", async () => {
+  const worlds = { w_1: world, w_2: { id: "w_2", name: "Other" } };
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const calls = [];
+  const slow = {
+    ...deps,
+    getWorld: async (id) => { await gate; return worlds[id]; },
+    getEntity: async (w, ref) => { calls.push(`${w}/${ref}`); return { ...maria, ref }; },
+  };
+  const target = new EventTarget();
+  setView({ section: "bible", worldId: "w_1", entityRef: "E1" });
+  installCopilot(target, slow);
+  const pending = target.hoardCopilot.context();
+  setView({ section: "bible", worldId: "w_2", entityRef: "E2" });
+  release();
+  const ctx = await pending;
+  assert.equal(ctx.project.external_project_id, "w_1");
+  assert.deepEqual(ctx.active_objects.map((o) => `${o.kind}:${o.object_id}`), ["world:w_1", "entity:E1"]);
+  assert.deepEqual(calls, ["w_1/E1"]);
+});

@@ -96,7 +96,10 @@ async function safe(fn) {
 
 // Pure core (dependencies injected so it can be tested): never throws; unknown or "new" ids yield no object.
 // deps: getWorld(id), getEntity(world, ref), getWorldContext(world), getThreads(world), getClocks(world)
-export async function buildContext({ view: v = view, editors = [], deps = {} }) {
+export async function buildContext({ view: current = view, editors = [], deps = {} }) {
+  // One snapshot of the view before the first await: navigating while the world loads must not mix two views
+  // (world A with an entity ref of world B).
+  const v = { ...current };
   const section = v.section || "worlds";
   const page = PAGE_NAMES[section] || section;
   const out = { active_objects: [], view: { page } };
@@ -167,7 +170,7 @@ export const onTurnEnd = () => scheduleRefresh();
 export function installCopilot(target = globalThis.window, deps = {}) {
   if (!target || target.hoardCopilot) return;
   target.hoardCopilot = {
-    context: () => buildContext({ view, editors: collectEditors(target), deps }),
+    context: () => buildContext({ view: getView(), editors: collectEditors(target), deps }),
     onTurnEnd,
   };
   target.addEventListener("hoard:copilot-turn-end", scheduleRefresh);
