@@ -1042,4 +1042,9 @@ def create_app(data_dir: Path, static_dir: Optional[Path] = None, port: int = DE
     family.install_fastapi(app, "scheherazade", str(data_dir),
                            mcp_source=str(Path(__file__).with_name("mcp_server.py")))
 
+    # The shared Faustus assistant panel: relay + launcher, routes placed
+    # ahead of the SPA catch-all above.
+    from .hoard_link.copilot import install_copilot
+    install_copilot(app, "scheherazade", str(data_dir), app_name="Scheherazade's Hoard")
+
     return app
