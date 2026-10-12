@@ -3,6 +3,8 @@ import { Clock as ClockIcon, Plus } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
+import { useCopilotRefresh, useFormSnapshot } from "../lib/copilot";
+import { filledFields } from "../lib/copilot-context";
 import type { Clock, Thread, ThreadStatus, World } from "../lib/types";
 import { Badge, EmptyState, ErrorBanner, Field } from "../components/ui";
 
@@ -74,6 +76,10 @@ export function ThreadsClocksPage({ world, lang }: { world: World; lang: Lang })
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world.id]);
+
+  useCopilotRefresh(load);
+  useFormSnapshot("thread-new", null, () => (addingThread ? filledFields({ title: threadTitle }) : null));
+  useFormSnapshot("clock-new", null, () => (addingClock ? filledFields({ name: clockName, segments: clockSegments }, { segments: 4 }) : null));
 
   async function submitThread() {
     if (!threadTitle.trim()) return;

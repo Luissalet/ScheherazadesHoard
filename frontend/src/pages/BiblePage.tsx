@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Eye, EyeOff, Lock, Pencil, Plus, Search } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { DictKey, Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
+import { useCopilotRefresh, useFormSnapshot, useOpenEntity } from "../lib/copilot";
+import { changedFields, entityPatchBody, filledFields, rebaseForm } from "../lib/copilot-context";
 import type { Entity, EntityKind, EntityStatus, World } from "../lib/types";
 import { Badge, EmptyState, ErrorBanner, Field } from "../components/ui";
 
@@ -17,8 +19,6 @@ function kindLabel(kind: EntityKind, lang: Lang): string {
 export function statusLabel(status: EntityStatus, lang: Lang): string {
   return STATUSES.includes(status) ? t(`entity_status_${status}` as DictKey, lang) : status;
 }
-
-const splitList = (text: string) => text.split(",").map((x) => x.trim()).filter(Boolean);
 
 type EditDraft = {
   name: string; status: EntityStatus; summary: string; description: string;
@@ -39,20 +39,32 @@ function EntityEditForm({ world, entity, lang, withSecrets, onSaved, onCancel }:
   onSaved: (e: Entity) => void; onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<EditDraft>(() => draftOf(entity));
+  const baseRef = useRef<EditDraft>(draftOf(entity));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (key: keyof EditDraft) => (ev: { target: { value: string } }) =>
     setDraft((d) => ({ ...d, [key]: ev.target.value }));
 
+  // The entity reloaded behind the form (the assistant changed it): untouched fields follow it, what the user typed stays.
+  useEffect(() => {
+    const previous = baseRef.current;
+    const next = draftOf(entity);
+    baseRef.current = next;
+    setDraft((d) => rebaseForm(previous, next, d) as EditDraft);
+  }, [entity]);
+
+  useFormSnapshot("entity-form", entity.ref, () => changedFields(baseRef.current, draft));
+
   async function save() {
     setBusy(true);
     setError(null);
     try {
-      const body: Partial<Entity> = {
-        name: draft.name, status: draft.status, summary: draft.summary, description: draft.description,
-        aliases: splitList(draft.aliases), tags: splitList(draft.tags),
-      };
-      if (withSecrets) body.secrets = draft.secrets;
+      // Only the fields the user changed travel, so an edit the assistant made meanwhile survives.
+      const body: Partial<Entity> = entityPatchBody(changedFields(baseRef.current, draft), withSecrets);
+      if (Object.keys(body).length === 0) {
+        onCancel();
+        return;
+      }
       onSaved(await api.patchEntity(world.id, entity.ref, body));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -127,6 +139,14 @@ export function BiblePage({ world, lang }: { world: World; lang: Lang }) {
     loadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world.id]);
+
+  useOpenEntity(selectedRef);
+  // The assistant finished a turn: reload the list and the open entity in place (an open editor keeps what was typed).
+  useCopilotRefresh(async () => {
+    await loadList();
+    if (selectedRef) setDetail(await api.getEntity(world.id, selectedRef, showSecrets));
+  });
+  useFormSnapshot("entity-new", null, () => (creating ? filledFields({ name: newName, kind: newKind }, { kind: "character" }) : null));
 
   useEffect(() => {
     setEditing(false);

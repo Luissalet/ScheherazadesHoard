@@ -3,6 +3,7 @@ import { Activity as ActivityIcon } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
+import { useCopilotRefresh } from "../lib/copilot";
 import type { AgentCall } from "../lib/types";
 import { Badge, EmptyState, ErrorBanner } from "../components/ui";
 
@@ -10,11 +11,15 @@ export function ActivityPage({ lang }: { lang: Lang }) {
   const [calls, setCalls] = useState<AgentCall[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const load = () => api.agentCalls(100)
+    .then((list) => setCalls([...list].sort((a, b) => b.created_at - a.created_at)))
+    .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+
   useEffect(() => {
-    api.agentCalls(100)
-      .then((list) => setCalls([...list].sort((a, b) => b.created_at - a.created_at)))
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useCopilotRefresh(load);
 
   return (
     <div>

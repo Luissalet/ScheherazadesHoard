@@ -3,6 +3,8 @@ import { Dices, Plus, Table as TableIcon } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
+import { useCopilotRefresh, useFormSnapshot } from "../lib/copilot";
+import { filledFields } from "../lib/copilot-context";
 import type { RandomTable, World } from "../lib/types";
 import { EmptyState, ErrorBanner, Field } from "../components/ui";
 
@@ -28,6 +30,9 @@ export function TablesPage({ world, lang }: { world: World; lang: Lang }) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world.id]);
+
+  useCopilotRefresh(load);
+  useFormSnapshot("table-new", null, () => (creating ? filledFields({ name, entries: entriesText.split("\n").map((l) => l.trim()).filter(Boolean) }) : null));
 
   async function submit() {
     const entries = entriesText

@@ -54,3 +54,18 @@ def test_play_can_set_the_scene_without_a_model():
     play = (FRONTEND_SRC / "pages" / "PlayPage.tsx").read_text(encoding="utf-8")
     assert "function SceneEditor" in play
     assert 'role: "system"' in play and "delta: { scene: {" in play
+
+
+def test_shared_assistant_contract_is_wired():
+    """The shared assistant panel asks the page what is open: window.hoardCopilot is registered once at start,
+    the forms answer the context request and the entity editor saves only the fields that changed."""
+    main = (FRONTEND_SRC / "main.tsx").read_text(encoding="utf-8")
+    assert "installCopilot()" in main
+    core = (FRONTEND_SRC / "lib" / "copilot-context.js").read_text(encoding="utf-8")
+    assert "scheherazade:context-request" in core and "hoard:copilot-turn-end" in core
+    assert "if (!target || target.hoardCopilot) return;" in core
+    bible = (FRONTEND_SRC / "pages" / "BiblePage.tsx").read_text(encoding="utf-8")
+    assert "entityPatchBody(changedFields(" in bible
+    assert 'useFormSnapshot("entity-form"' in bible and 'useFormSnapshot("entity-new"' in bible
+    play = (FRONTEND_SRC / "pages" / "PlayPage.tsx").read_text(encoding="utf-8")
+    assert 'useFormSnapshot("scene-form"' in play and "useCopilotRefresh(refresh)" in play

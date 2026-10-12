@@ -3,6 +3,8 @@ import { Dices, Eye, EyeOff, Image as ImageIcon, MapPin, ShieldCheck, Sparkles, 
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
+import { useCopilotRefresh, useFormSnapshot } from "../lib/copilot";
+import { changedFields, rebaseForm } from "../lib/copilot-context";
 import type { Entity, NarrateResult, Session, Turn, TurnRole, World, WorldCheckResult, WorldContextResult } from "../lib/types";
 import { Badge, ConfirmButton, ErrorBanner } from "../components/ui";
 
@@ -84,6 +86,21 @@ function SceneEditor({ world, lang, ctx, onApplied, onCancel }: {
   const [mood, setMood] = useState(ctx?.scene.mood ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The scene reloaded behind the editor (the assistant moved it): untouched fields follow it, what the user chose stays.
+  const loadedScene = { location: ctx?.scene.location?.ref ?? "", present: ctx?.scene.present.map((e) => e.ref) ?? [], mood: ctx?.scene.mood ?? "" };
+  const baseRef = useRef(loadedScene);
+  const loadedKey = JSON.stringify(loadedScene);
+  useEffect(() => {
+    const previous = baseRef.current;
+    baseRef.current = loadedScene;
+    const next = rebaseForm(previous, loadedScene, { location, present, mood });
+    setLocation(next.location);
+    setPresent(next.present);
+    setMood(next.mood);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedKey]);
+  useFormSnapshot("scene-form", null, () => changedFields(baseRef.current, { location, present, mood }));
 
   useEffect(() => {
     api.listEntities(world.id).then(setEntities).catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
@@ -211,6 +228,9 @@ export function PlayPage({ world, lang, onWorldChanged }: { world: World; lang: 
     api.prosperoAvailable().then((r) => setProspero(r.available)).catch(() => setProspero(false));
     api.narrationAvailable().then((r) => setVoiceUp(r.available)).catch(() => setVoiceUp(false));
   }, [refresh]);
+
+  useCopilotRefresh(refresh);
+  useFormSnapshot("turn-draft", null, () => (input.trim() ? { text: input.slice(0, 500), mode } : null));
 
   useEffect(() => () => { audioRef.current?.pause(); }, []);
 

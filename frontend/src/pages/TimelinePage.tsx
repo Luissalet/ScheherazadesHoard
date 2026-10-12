@@ -3,6 +3,8 @@ import { ListTree, Plus } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
+import { useCopilotRefresh, useFormSnapshot } from "../lib/copilot";
+import { filledFields } from "../lib/copilot-context";
 import type { TimelineEvent, World } from "../lib/types";
 import { Badge, EmptyState, ErrorBanner, Field } from "../components/ui";
 
@@ -28,6 +30,9 @@ export function TimelinePage({ world, lang }: { world: World; lang: Lang }) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world.id]);
+
+  useCopilotRefresh(load);
+  useFormSnapshot("timeline-new", null, () => (creating ? filledFields({ in_world_date: date, summary }) : null));
 
   async function submit() {
     if (!summary.trim()) return;

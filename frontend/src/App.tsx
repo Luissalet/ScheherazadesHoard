@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Header } from "./components/Header";
 import { Sidebar } from "./components/Sidebar";
 import { api } from "./lib/api";
+import { useCopilotRefresh, useCopilotView } from "./lib/copilot";
 import { detectLang, persistLang, t, type Lang } from "./lib/i18n";
 import type { World } from "./lib/types";
 
@@ -76,6 +77,10 @@ export default function App() {
   }, [worldId]);
 
   const reloadWorlds = () => setRefreshTick((n) => n + 1);
+
+  // What the shared assistant panel can ask about: the open world and screen. A turn end reloads the world list in place.
+  useCopilotView({ section, worldId });
+  useCopilotRefresh(reloadWorlds);
 
   useEffect(() => {
     let cancelled = false;

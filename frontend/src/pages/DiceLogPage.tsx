@@ -3,6 +3,7 @@ import { Dices } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
+import { useCopilotRefresh } from "../lib/copilot";
 import type { DiceLogEntry, World } from "../lib/types";
 import { EmptyState, ErrorBanner, Field } from "../components/ui";
 
@@ -26,6 +27,8 @@ export function DiceLogPage({ world, lang }: { world: World; lang: Lang }) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world.id]);
+
+  useCopilotRefresh(load);
 
   async function roll() {
     if (!expr.trim()) return;

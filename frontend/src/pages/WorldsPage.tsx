@@ -3,6 +3,8 @@ import { BookOpen, GitBranch, Plus, Upload, Users } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import type { Lang } from "../lib/i18n";
 import { t } from "../lib/i18n";
+import { useFormSnapshot } from "../lib/copilot";
+import { filledFields } from "../lib/copilot-context";
 import type { Ruleset, World } from "../lib/types";
 import { EmptyState, ErrorBanner, Field } from "../components/ui";
 
@@ -23,6 +25,8 @@ export function WorldsPage({
   const [language, setLanguage] = useState(lang);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useFormSnapshot("world-new", null, () => (creating ? filledFields({ name, genre, tone, premise, ruleset, language }, { ruleset: "freeform", language: lang }) : null));
 
   async function submit() {
     if (!name.trim()) return;
